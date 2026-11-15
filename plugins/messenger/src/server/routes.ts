@@ -20,9 +20,10 @@ import {
 } from "../shared/contracts.js";
 import { ROLE, requireRole } from "./access.js";
 import { routes } from "./collections.js";
+import { chosenWorkspace } from "./matching.js";
 import { workspaceLanguage } from "./people.js";
-import { refusalOf, SlackError, slack } from "./slack/api.js";
-import { connectionOf, isConnected } from "./store.js";
+import { bot, refusalOf, SlackError, slack } from "./slack/api.js";
+import { connectionsOf } from "./store.js";
 import { serverWords } from "./words.js";
 
 const channelInfo = z.object({
@@ -41,21 +42,40 @@ const channelsPage = z.object({
 /** At most this many pages of channels are listed: a thousand channels. */
 const CHANNEL_PAGES = 5;
 
-async function requireConnected(ctx: PluginContext): Promise<void> {
-  if (!isConnected(await connectionOf(ctx))) {
-    throw new PluginError("not_connected", serverWords(ctx.language).refused.notConnected);
-  }
-}
+/** A workspace's argument: the one a channel is in. */
+const workspace = arg.text({
+  about:
+    "the workspace the channel is in (T0123ABCD), as status lists them; needed where the app is in several",
+  optional: true,
+  max: 40,
+});
 
-function viewOf(id: string, data: z.infer<typeof routes.schema>): RouteView {
+function viewOf(
+  id: string,
+  data: z.infer<typeof routes.schema>,
+  names: ReadonlyMap<string, string | null>,
+): RouteView {
   return {
     id,
     kind: data.kind,
+    teamId: data.teamId,
+    teamName: names.get(data.teamId) ?? null,
+    connected: names.has(data.teamId),
     channelId: data.channelId,
     channelName: data.channelName,
     language: data.language,
     as: data.as,
   };
+}
+
+/** The connected workspaces' names, by id. */
+async function teamNames(ctx: PluginContext): Promise<Map<string, string | null>> {
+  return new Map(
+    (await connectionsOf(ctx)).map((connection) => [
+      connection.data.teamId,
+      connection.data.teamName,
+    ]),
+  );
 }
 
 export const route = defineCommand({
@@ -79,18 +99,20 @@ export const route = defineCommand({
         "under whose name: the person's, where their account is matched (person), or the app's (app); person unless said",
       optional: true,
     }),
+    workspace,
   },
   roles: [ROLE],
   async run(ctx, args) {
     requireRole(ctx);
     const words = serverWords(ctx.language);
-    await requireConnected(ctx);
+    const connection = await chosenWorkspace(ctx, args.workspace);
+    const teamId = connection.data.teamId;
     if (!/^[CG][A-Z0-9]{2,40}$/.test(args.channel)) {
       throw new PluginError("unknown_channel", words.refused.unknownChannel(args.channel));
     }
     let channel: z.infer<typeof channelInfo>;
     try {
-      const answer = await slack(ctx, "conversations.info", { channel: args.channel });
+      const answer = await slack(ctx, "conversations.info", { channel: args.channel }, bot(teamId));
       channel = channelInfo.parse(answer.channel);
     } catch (error) {
       if (error instanceof SlackError && error.code === "channel_not_found") {
@@ -108,13 +130,14 @@ export const route = defineCommand({
     const kind = args.kind ?? "hr:leave-approved";
     const data = {
       kind,
+      teamId,
       channelId: channel.id,
       channelName: name,
       language: args.language ?? (await workspaceLanguage(ctx)) ?? languageOf(ctx.language),
       as: args.as ?? "person",
     } as const;
     const found = await ctx.records(routes).list({
-      where: { kind, channelId: channel.id },
+      where: { kind, channelId: channel.id, teamId },
       limit: 1,
     });
     const existing = found.items[0];
@@ -122,7 +145,10 @@ export const route = defineCommand({
       existing === undefined
         ? await ctx.records(routes).create(data)
         : await ctx.records(routes).update(existing.id, data);
-    return { text: words.said.routeSaved(record.id, name), data: viewOf(record.id, record.data) };
+    return {
+      text: words.said.routeSaved(record.id, name),
+      data: viewOf(record.id, record.data, await teamNames(ctx)),
+    };
   },
 });
 
@@ -153,35 +179,41 @@ export const routesQuery = defineQuery({
   async run(ctx): Promise<RouteView[]> {
     requireRole(ctx);
     const page = await ctx.records(routes).list({ limit: 200, order: { field: "kind" } });
-    return page.items.map((record) => viewOf(record.id, record.data));
+    const names = await teamNames(ctx);
+    return page.items.map((record) => viewOf(record.id, record.data, names));
   },
 });
 
 export const channels = defineQuery({
-  about:
-    "The workspace's channels a route may name: the public ones, and the private the app is in.",
+  about: "A workspace's channels a route may name: the public ones, and the private the app is in.",
   args: {
     search: arg.text({
       about: "only the channels whose name holds these words",
       optional: true,
       max: 80,
     }),
+    workspace,
   },
   roles: [ROLE],
   async run(ctx, args): Promise<ChannelView[]> {
     requireRole(ctx);
-    await requireConnected(ctx);
+    const teamId = (await chosenWorkspace(ctx, args.workspace)).data.teamId;
     const found: ChannelView[] = [];
     let cursor: string | undefined;
     try {
       for (let page = 0; page < CHANNEL_PAGES; page += 1) {
         const answer = channelsPage.parse(
-          await slack(ctx, "conversations.list", {
-            types: "public_channel,private_channel",
-            exclude_archived: true,
-            limit: 200,
-            ...(cursor === undefined ? {} : { cursor }),
-          }),
+          await slack(
+            ctx,
+            "conversations.list",
+            {
+              types: "public_channel,private_channel",
+              exclude_archived: true,
+              limit: 200,
+              ...(cursor === undefined ? {} : { cursor }),
+            },
+            bot(teamId),
+          ),
         );
         for (const raw of answer.channels) {
           const parsed = channelInfo.safeParse(raw);

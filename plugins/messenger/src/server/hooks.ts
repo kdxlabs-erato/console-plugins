@@ -1,7 +1,9 @@
 // What the console and the other plugins tell the messenger: HR's leave events, which the thread
 // and the routes tell in Slack; HR enabled, disabled or upgraded, which puts the leave shortcut in
 // the app's manifest or takes it away; and a person's address changed, or their coming back or
-// leaving, which their link to an account follows.
+// leaving, which their link to an account follows; and the boards' own events, a task given, moved,
+// changed, commented or put away, a decision raised, an agent account stopping, which each person
+// they are about is told of as they chose (ADR-0015).
 import {
   type HookHandler,
   type PluginContext,
@@ -12,6 +14,7 @@ import { keepManifest } from "./connection.js";
 import { HR } from "./integrations/hr/contract.js";
 import { leaveHooks } from "./integrations/hr/thread.js";
 import { onPersonChanged } from "./matching.js";
+import { ownWorkHooks } from "./notices.js";
 import { noteProblem } from "./store.js";
 
 /** HR came, went or changed: the shortcut follows, written only where the manifest differs. */
@@ -36,6 +39,7 @@ export async function onLifecycle(ctx: PluginContext, event: PluginHookEvent): P
 
 export const hooks: Readonly<Record<string, HookHandler>> = {
   ...leaveHooks,
+  ...ownWorkHooks,
   "console:plugin.enabled": onLifecycle,
   "console:plugin.disabled": onLifecycle,
   "console:plugin.upgraded": onLifecycle,

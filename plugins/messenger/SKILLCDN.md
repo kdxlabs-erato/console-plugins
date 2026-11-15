@@ -1,6 +1,6 @@
 ---
 name: Messenger
-description: "The skills of Messenger, a plugin of the SkillCDN Console: how whoever keeps the messenger connects Slack, routes plugin events to channels, matches people to their accounts, and reads what was sent."
+description: "The skills of Messenger, a plugin of the SkillCDN Console: how whoever keeps the messenger connects Slack, routes plugin events to channels, matches people to their accounts, and reads what was sent; and how a person chooses what they are told of their own work."
 license: MIT
 language: en
 metadata:
@@ -8,7 +8,7 @@ metadata:
 translations:
   ko:
     name: "메신저"
-    description: "SkillCDN 콘솔의 플러그인 메신저의 스킬: 메신저 담당이 Slack을 연결하고, 플러그인 알림을 채널로 보내고, 사람을 계정과 맞추고, 보낸 기록을 읽는 법."
+    description: "SkillCDN 콘솔의 플러그인 메신저의 스킬: 메신저 담당이 Slack을 연결하고, 플러그인 알림을 채널로 보내고, 사람을 계정과 맞추고, 보낸 기록을 읽는 법. 그리고 각자 자기 일의 알림을 고르는 법."
 ---
 # Rules for the skills of Messenger
 

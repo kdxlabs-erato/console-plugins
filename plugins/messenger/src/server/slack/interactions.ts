@@ -2,14 +2,15 @@
 // within the form, a form submitted or closed, a decision's button. It answers the request and
 // nothing else (ADR-0011): the signature verified first, the presser matched to a person by their
 // account, the form opened, drawn again, pushed or checked for them, the decision answered for
-// them where it is on their plate. A refusal reaches the presser alone, through the address the
-// press carried. What others read follows from the producer's events.
+// them where it is on their plate; a message of one's own work turned off by its kind. A refusal
+// reaches the presser alone, through the address the press carried. What others read follows from
+// the producer's events.
 import {
   defineEndpoint,
   type EndpointResponse,
   type PluginContext,
 } from "@skillcdn/console/plugin";
-import type { Language } from "../../shared/contracts.js";
+import { type Language, languageOf } from "../../shared/contracts.js";
 import { refusalCode } from "../integrations/hr/contract.js";
 import { CANCEL_FORM } from "../integrations/hr/form.js";
 import {
@@ -20,8 +21,9 @@ import {
   submitCancel,
   submitLeave,
 } from "../integrations/hr/requests.js";
+import { NOTICE_OFF, turnOff } from "../notices.js";
 import { languageOfPerson, workspaceLanguage } from "../people.js";
-import { connectionOf, isConnected, linkOfMember } from "../store.js";
+import { appOf, connectedTeam, linkOfMember } from "../store.js";
 import { serverWords } from "../words.js";
 import { outbound } from "./api.js";
 import { link } from "./blocks.js";
@@ -35,6 +37,7 @@ import {
   shortcutPayload,
   submissionPayload,
   teamOf,
+  teamOfPayload,
 } from "./payloads.js";
 import { verifiedFromSlack } from "./signature.js";
 
@@ -42,19 +45,24 @@ const OK: EndpointResponse = { status: 200 };
 const JSON_TYPE = { "content-type": "application/json" } as const;
 const DECISION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The person who pressed, by their account, with the language they read in; none where unmatched. */
+/**
+ * The person who pressed, by their account in the workspace they pressed in, with the language
+ * they read in; none where unmatched.
+ */
 async function presserOf(
   ctx: PluginContext,
+  teamId: string,
   memberId: string,
   fallback: Language,
 ): Promise<Presser | null> {
-  const found = await linkOfMember(ctx, memberId);
+  const found = await linkOfMember(ctx, teamId, memberId);
   if (found === null) {
     return null;
   }
   return {
     personId: found.data.personId,
     language: await languageOfPerson(ctx, found.data.personId, fallback),
+    teamId,
   };
 }
 
@@ -144,25 +152,28 @@ export const slackEndpoint = defineEndpoint({
     if (!kind.success) {
       return { status: 400, headers: JSON_TYPE, body: { error: "no_payload" } };
     }
-    const connection = await connectionOf(ctx);
-    if (!isConnected(connection)) {
+    // A press is answered in the workspace it came from, where the app is installed (ADR-0014).
+    const team = teamOfPayload(json);
+    const connection = await connectedTeam(ctx, team);
+    if (connection === null) {
       return OK;
     }
+    const teamId = connection.data.teamId;
     // Whoever the console knows no language of reads the workspace's, else the app's.
-    const language = (await workspaceLanguage(ctx)) ?? connection.data.language;
+    const language = (await workspaceLanguage(ctx)) ?? (await appOf(ctx))?.data.language ?? "en";
     switch (kind.data.type) {
       case "shortcut": {
         const payload = shortcutPayload.safeParse(json);
         if (
           !payload.success ||
           payload.data.callback_id !== LEAVE_SHORTCUT ||
-          teamOf(payload.data) !== connection.data.teamId
+          teamOf(payload.data) !== teamId
         ) {
           return OK;
         }
-        const presser = await presserOf(ctx, payload.data.user.id, language);
+        const presser = await presserOf(ctx, teamId, payload.data.user.id, language);
         try {
-          await openLeaveForm(ctx, payload.data, presser, language);
+          await openLeaveForm(ctx, teamId, payload.data, presser, language);
         } catch (error) {
           ctx.log.warn("the leave form did not open", { code: refusalCode(error) });
         }
@@ -174,11 +185,11 @@ export const slackEndpoint = defineEndpoint({
         if (
           !payload.success ||
           (form !== LEAVE_SHORTCUT && form !== CANCEL_FORM) ||
-          teamOf(payload.data) !== connection.data.teamId
+          teamOf(payload.data) !== teamId
         ) {
           return OK;
         }
-        const presser = await presserOf(ctx, payload.data.user.id, language);
+        const presser = await presserOf(ctx, teamId, payload.data.user.id, language);
         const answer =
           form === CANCEL_FORM
             ? await submitCancel(ctx, payload.data, presser, language)
@@ -192,11 +203,11 @@ export const slackEndpoint = defineEndpoint({
         if (
           !payload.success ||
           payload.data.view.callback_id !== CANCEL_FORM ||
-          teamOf(payload.data) !== connection.data.teamId
+          teamOf(payload.data) !== teamId
         ) {
           return OK;
         }
-        const presser = await presserOf(ctx, payload.data.user.id, language);
+        const presser = await presserOf(ctx, teamId, payload.data.user.id, language);
         try {
           await redrawAfterCancel(ctx, payload.data, presser);
         } catch (error) {
@@ -206,15 +217,27 @@ export const slackEndpoint = defineEndpoint({
       }
       case "block_actions": {
         const payload = actionsPayload.safeParse(json);
-        if (!payload.success || teamOf(payload.data) !== connection.data.teamId) {
+        if (!payload.success || teamOf(payload.data) !== teamId) {
           return OK;
         }
-        const presser = await presserOf(ctx, payload.data.user.id, language);
+        const presser = await presserOf(ctx, teamId, payload.data.user.id, language);
         if (payload.data.view?.callback_id === LEAVE_SHORTCUT) {
           try {
             await onFormPress(ctx, payload.data, presser);
           } catch (error) {
             ctx.log.warn("the leave form did not follow the press", { code: refusalCode(error) });
+          }
+          return OK;
+        }
+        const off = payload.data.actions.find((action) => action.action_id === NOTICE_OFF);
+        if (off !== undefined) {
+          // A message of one's own work: its kind turned off for whoever pressed, as theirs.
+          const said =
+            presser === null
+              ? serverWords(language).form.notLinked
+              : await turnOff(ctx, presser.personId, off.value ?? "", languageOf(presser.language));
+          if (said !== null) {
+            await tellPresser(ctx, payload.data.response_url, said);
           }
           return OK;
         }

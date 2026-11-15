@@ -5,7 +5,7 @@
 import type { PluginHookEvent } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
 import type { ActivityRow } from "../shared/contracts.js";
-import { activity, onLeaveEvent } from "./index.js";
+import { activity, onLeaveEvent, removeWorkspace } from "./index.js";
 import {
   CONSOLE,
   connected,
@@ -17,6 +17,7 @@ import {
   MINSU,
   NOW,
   setup,
+  TEAM,
 } from "./test-fakes.js";
 
 const REQUEST = "0199c000-0000-7000-8000-0000000000a1";
@@ -233,12 +234,128 @@ describe("the steps", () => {
   });
 });
 
+describe("several workspaces", () => {
+  const OTHER = { id: "T0OTHER01", name: "Other" };
+
+  it("tells the thread where the person has an account, asks a decider directly in theirs, and a channel only of its own people", async () => {
+    const views: Record<string, unknown> = { [REQUEST]: view({}) };
+    const slack = fakeSlack();
+    const made = setup({ slack, hr: fakeHr({ views }) });
+    await connected(made.ctx);
+    await connected(made.ctx, "ko", OTHER);
+    // Minsu is in the other workspace alone; Jihye, who decides, in the default alone.
+    await linked(made.ctx, MINSU, "U0MINSU02", null, OTHER.id);
+    await linked(made.ctx, JIHYE, "U0JIHYE01");
+    for (const [team, channel] of [
+      [TEAM, "C0GENERAL"],
+      [OTHER.id, "C0OTHERS1"],
+    ] as const) {
+      await made.ctx.records("routes").create({
+        kind: "hr:leave-approved",
+        teamId: team,
+        channelId: channel,
+        channelName: channel.toLowerCase(),
+        language: "en",
+        as: "person",
+      });
+    }
+    const hook = made.ctx.as(CONSOLE);
+    await onLeaveEvent(hook, event("leave-requested"));
+    const opened = slack.of("conversations.open");
+    expect(opened.map((call) => [call.params.users, call.secrets[0]?.key])).toEqual([
+      ["U0MINSU02", OTHER.id],
+      ["U0JIHYE01", TEAM],
+    ]);
+    const thread = made.ctx.all("threads")[0]?.data as {
+      teamId: string;
+      steps: { dms: { teamId: string }[] }[];
+    };
+    expect(thread.teamId).toBe(OTHER.id);
+    expect(thread.steps[0]?.dms[0]?.teamId).toBe(TEAM);
+    views[REQUEST] = view({ state: "approved", decidedBy: brief(JIHYE), asked: [] });
+    await onLeaveEvent(hook, event("leave-approved"));
+    // The step's direct message is closed in its own workspace.
+    expect(slack.of("chat.update").map((call) => call.secrets[0]?.key)).toContain(TEAM);
+    const channels = slack
+      .of("chat.postMessage")
+      .filter((call) => call.params.channel?.startsWith("C0"));
+    expect(channels.map((call) => [call.params.channel, call.secrets[0]?.key])).toEqual([
+      ["C0OTHERS1", OTHER.id],
+    ]);
+  });
+
+  it("leaves what it wrote in a workspace taken away since, and tells the rest", async () => {
+    const views: Record<string, unknown> = { [REQUEST]: view({}) };
+    const slack = fakeSlack();
+    const made = setup({ slack, hr: fakeHr({ views }) });
+    await connected(made.ctx);
+    await connected(made.ctx, "ko", OTHER);
+    await linked(made.ctx, MINSU, "U0MINSU02", null, OTHER.id);
+    await linked(made.ctx, JIHYE, "U0JIHYE01");
+    await made.ctx.records("routes").create({
+      kind: "hr:leave-approved",
+      teamId: OTHER.id,
+      channelId: "C0OTHERS1",
+      channelName: "others",
+      language: "en",
+      as: "person",
+    });
+    const hook = made.ctx.as(CONSOLE);
+    await onLeaveEvent(hook, event("leave-requested"));
+    // Jihye was asked directly in the default workspace, which is taken away since.
+    await removeWorkspace(
+      made.ctx,
+      made.ctx.all("connections").find((found) => found.data.teamId === TEAM) as never,
+      false,
+    );
+    views[REQUEST] = view({ state: "approved", decidedBy: brief(JIHYE), asked: [] });
+    await onLeaveEvent(hook, event("leave-approved"));
+    expect(slack.of("chat.update").map((call) => call.secrets[0]?.key)).not.toContain(TEAM);
+    const channels = slack
+      .of("chat.postMessage")
+      .filter((call) => call.params.channel?.startsWith("C0"));
+    expect(channels.map((call) => call.params.channel)).toEqual(["C0OTHERS1"]);
+    expect(made.ctx.all("deliveries").at(-1)?.data.outcome).toBe("sent");
+  });
+
+  it("begins the thread in the workspace the request was made in", async () => {
+    const views: Record<string, unknown> = { [REQUEST]: view({}) };
+    const slack = fakeSlack();
+    const made = setup({ slack, hr: fakeHr({ views }) });
+    await connected(made.ctx);
+    await connected(made.ctx, "ko", OTHER);
+    await linked(made.ctx, MINSU, "U0MINSU01");
+    await linked(made.ctx, MINSU, "U0MINSU02", null, OTHER.id);
+    await linked(made.ctx, JIHYE, "U0JIHYE02", null, OTHER.id);
+    // As the shortcut's submission leaves it: the thread named, with nothing written yet.
+    await made.ctx.records("threads").create({
+      plugin: "hr",
+      thing: REQUEST,
+      personId: MINSU.id,
+      teamId: OTHER.id,
+      channelId: null,
+      members: [],
+      rootTs: null,
+      rootAs: "app",
+      language: "ko",
+      steps: [],
+      posts: [],
+      state: "open",
+    });
+    await onLeaveEvent(made.ctx.as(CONSOLE), event("leave-requested"));
+    expect(slack.of("conversations.open")[0]?.params.users).toBe("U0MINSU02,U0JIHYE02");
+    expect(slack.of("conversations.open")[0]?.secrets[0]?.key).toBe(OTHER.id);
+    expect(made.ctx.all("threads")).toHaveLength(1);
+  });
+});
+
 describe("the end of a request", () => {
   async function requested() {
     const views: Record<string, unknown> = { [REQUEST]: view({}) };
     const made = await ready(views);
     await made.ctx.records("routes").create({
       kind: "hr:leave-approved",
+      teamId: TEAM,
       channelId: "C0GENERAL",
       channelName: "general",
       language: "en",
@@ -267,6 +384,7 @@ describe("the end of a request", () => {
     const { hook, slack, ctx } = await ready({ [REQUEST]: view({ state: "approved", asked: [] }) });
     await ctx.records("routes").create({
       kind: "hr:leave-approved",
+      teamId: TEAM,
       channelId: "C0GENERAL",
       channelName: "general",
       language: "ko",

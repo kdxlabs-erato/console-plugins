@@ -2,7 +2,7 @@
 // answers and what it refuses with, in the caller's language; what Slack shows, in the language
 // of whoever reads it (the person a form or a refusal is for, the requester of a thread, the
 // deciders a step asks, the route's for a channel); and the names the app takes in Slack.
-import type { Language } from "../shared/contracts.js";
+import type { Language, NoticeKind } from "../shared/contracts.js";
 
 /** The parts of a day as hr spells them, in the words a message says them in. */
 export type PartWord = "none" | "am" | "pm" | "q1" | "q2" | "q3" | "q4";
@@ -32,11 +32,27 @@ export interface ServerWords {
     readonly icon: string;
     readonly appNameRefused: (message: string) => string;
     readonly botNameRefused: (message: string) => string;
+    readonly unknownWorkspace: (team: string) => string;
+    readonly workspaceNeeded: string;
+    readonly workspaceGone: (name: string) => string;
+    readonly tooManyWorkspaces: string;
+    readonly orgInstall: string;
+    readonly noPerson: string;
+    readonly awaitingAccept: (name: string) => string;
+    readonly notPending: (team: string) => string;
+    readonly busy: string;
+    readonly noticeAt: string;
+    readonly noticeBoth: (kinds: string) => string;
   };
   readonly said: {
     readonly appMade: (url: string) => string;
     readonly appUpdated: (url: string) => string;
-    readonly appInstalledUpdated: string;
+    readonly installLink: (url: string) => string;
+    readonly distribution: (url: string) => string;
+    readonly removed: (name: string) => string;
+    readonly workspaceSaved: (name: string, isDefault: boolean, projects: string) => string;
+    readonly notices: (kinds: string, when: string) => string;
+    readonly accepted: (name: string) => string;
     readonly names: (app: string, bot: string, handle: string | null) => string;
     readonly icon: {
       readonly set: string;
@@ -50,7 +66,7 @@ export interface ServerWords {
     readonly disconnected: string;
     readonly disconnectedAppLeft: string;
     readonly testSent: (where: string) => string;
-    readonly matched: (matched: string, unmatched: string) => string;
+    readonly matched: (workspace: string, matched: string, unmatched: string) => string;
     readonly matchedOne: (name: string) => string;
     readonly notMatchedOne: (name: string) => string;
     readonly routeSaved: (id: string, channel: string) => string;
@@ -62,6 +78,7 @@ export interface ServerWords {
     readonly configToken: string;
     readonly app: string;
     readonly install: string;
+    readonly accept: (names: string) => string;
     readonly hrRole: string;
     readonly noEmail: (count: string) => string;
     readonly noRoute: string;
@@ -163,6 +180,29 @@ export interface ServerWords {
   readonly days: (count: string) => string;
   readonly parts: Readonly<Record<PartWord, string>>;
   readonly decisions: string;
+  /** What a person is told of their own work, in a direct message (ADR-0015). */
+  readonly notice: {
+    readonly kinds: Readonly<Record<NoticeKind, string>>;
+    readonly nothing: string;
+    readonly now: string;
+    readonly daily: (at: string) => string;
+    readonly assigned: (actor: string, task: string) => string;
+    readonly changed: (actor: string, task: string, what: string) => string;
+    readonly moved: (actor: string, task: string, state: string) => string;
+    readonly commented: (actor: string, task: string, excerpt: string) => string;
+    readonly archived: (actor: string, task: string) => string;
+    readonly decision: (actor: string, question: string) => string;
+    readonly agent: (account: string, state: string, detail: string) => string;
+    readonly fields: Readonly<Record<string, string>>;
+    readonly states: Readonly<Record<string, string>>;
+    readonly agentStates: Readonly<Record<string, string>>;
+    readonly open: string;
+    readonly choose: string;
+    readonly turnOff: (kind: string) => string;
+    readonly turnedOff: (kind: string, page: string) => string;
+    readonly dayTitle: (count: string) => string;
+    readonly more: (count: string) => string;
+  };
 }
 
 const EN: ServerWords = {
@@ -179,7 +219,7 @@ const EN: ServerWords = {
     configTokenGone:
       "The app configuration token has expired and could not be renewed: an administrator pastes a new one, and its refresh token, on the console's settings page.",
     notMade: "There is no Slack app yet: run connect first.",
-    notConnected: "Slack is not connected: install the app in the workspace first.",
+    notConnected: "Slack is not connected: install the app in a workspace first.",
     callerNotMatched:
       "Your console account is not matched to a Slack account, so there is nobody to send it to: name a channel instead.",
     sealFailed: (what) =>
@@ -192,7 +232,7 @@ const EN: ServerWords = {
     unknownRoute: "There is no such route.",
     unknownPerson: "There is nobody with that login in the console.",
     oauthStale:
-      "The installation was not started here, or took more than fifteen minutes: start it again from the Connection page.",
+      "This installation link was not given out by the console, was used already, or is more than a day old: ask whoever keeps the messenger for a new one.",
     oauthRefused: (error) => `Slack did not install the app: ${error}.`,
     appName: "The app's name is one line of 35 characters at most.",
     botName:
@@ -200,13 +240,40 @@ const EN: ServerWords = {
     icon: "The icon is the public https address of an image, which Slack fetches itself.",
     appNameRefused: (message) => `Slack refused the app's name: ${message}`,
     botNameRefused: (message) => `Slack refused the bot's name: ${message}`,
+    unknownWorkspace: (team) => `The app is not installed in a workspace ${team}.`,
+    workspaceNeeded:
+      "The app is installed in several workspaces: name one with --workspace, as status lists them.",
+    workspaceGone: (name) =>
+      `${name} took the app away in Slack, so nothing is told there now: install it there again to bring it back.`,
+    tooManyWorkspaces:
+      "The app is installed in as many workspaces as the console keeps a token for: disconnect one before installing it in another.",
+    orgInstall:
+      "The app is installed in one workspace at a time, not in a whole Enterprise Grid organization: install it in a workspace.",
+    noPerson: "This is a person's own choice: it is made as a person, or through their agent.",
+    awaitingAccept: (name) =>
+      `The app is installed in ${name}. Nothing is told there until whoever keeps the messenger accepts it on the console; you may close this page.`,
+    notPending: (team) => `No workspace ${team} waits to be accepted.`,
+    busy: "The app's record changed meanwhile, again and again: try again.",
+    noticeAt: "The time of the day's message is HH:MM, as 09:00.",
+    noticeBoth: (kinds) => `${kinds} cannot be both on and off.`,
   },
   said: {
     appMade: (url) =>
-      `The Slack app is made. Someone who may install apps in the workspace opens this address to install it: ${url}`,
+      `The Slack app is made. Someone who may install apps in a workspace opens this address within a day to install it there: ${url}`,
     appUpdated: (url) =>
-      `The Slack app is up to date. To install it in the workspace, open this address: ${url}`,
-    appInstalledUpdated: "The Slack app is up to date and installed.",
+      `The Slack app is up to date. To install it in a workspace, open this address within a day: ${url}`,
+    installLink: (url) =>
+      `Someone who may install apps in a workspace opens this address within a day to install the app there; it is good once: ${url}`,
+    distribution: (url) =>
+      `To install it in a workspace other than the one it was made in, turn on its distribution once on Slack's page, under Activate Public Distribution: ${url}`,
+    removed: (name) =>
+      `The app is uninstalled from ${name} and its threads there are closed. Its routes and accounts come back if it is installed there again.`,
+    workspaceSaved: (name, isDefault, projects) =>
+      isDefault
+        ? `${name} is the default workspace, told of every project no other names, and of ${projects} named here.`
+        : `${name} is told of ${projects} projects named here.`,
+    notices: (kinds, when) => `You are told of ${kinds}, ${when}.`,
+    accepted: (name) => `${name} is accepted: its people are matched within the hour.`,
     names: (app, bot, handle) =>
       `In Slack the app is "${app}" and its bot "${bot}"${handle === null ? "" : `, @${handle}`}.`,
     icon: {
@@ -220,12 +287,12 @@ const EN: ServerWords = {
       refused: (code) => `Slack refused the icon: ${code}.`,
     },
     disconnected:
-      "The app is uninstalled from the workspace and deleted. connect makes a new one, in this workspace or another.",
+      "The app is uninstalled from every workspace and deleted. connect makes a new one.",
     disconnectedAppLeft:
       "The app is no longer used, but the configuration token could not delete it in Slack: delete it at api.slack.com/apps. connect makes a new one.",
     testSent: (where) => `A test message went to ${where}.`,
-    matched: (matched, unmatched) =>
-      `Matched ${matched} people to Slack accounts by email; ${unmatched} have none.`,
+    matched: (workspace, matched, unmatched) =>
+      `In ${workspace}, matched ${matched} people to Slack accounts by email; ${unmatched} have none there.`,
     matchedOne: (name) => `${name} is matched to a Slack account.`,
     notMatchedOne: (name) => `${name} has no Slack account with their email.`,
     routeSaved: (id, channel) => `Route ${id} sends it to #${channel}.`,
@@ -238,7 +305,9 @@ const EN: ServerWords = {
       "An administrator puts the app configuration token and its refresh token, made at api.slack.com/apps under Your App Configuration Tokens, on the plugin's settings page or with `console plugin messenger secret slackConfigToken` and `slackConfigRefreshToken` at their own terminal.",
     app: "Make the app, on the Connection page or with `connect`, its names and icon chosen then.",
     install:
-      "Someone who may install apps in the Slack workspace opens the address `connect` gives, within fifteen minutes, in the browser they are signed in to the console with, and approves.",
+      "Someone who may install apps in a Slack workspace opens the address `connect` or `install` gives, within a day, and approves.",
+    accept: (names) =>
+      `${names} installed the app and waits: accept it on the Connection page or with \`workspace <id> --accept\` if it is a workspace of yours, else disconnect it.`,
     hrRole:
       "Grant HR's role `hr` to the messenger on the plugin's settings page: until then the shortcut works and no thread is begun.",
     noEmail: (count) =>
@@ -358,6 +427,59 @@ const EN: ServerWords = {
     q4: "Late-afternoon quarter",
   },
   decisions: "Decisions",
+  notice: {
+    kinds: {
+      assigned: "tasks given to you",
+      moved: "your tasks moved",
+      changed: "your tasks changed",
+      commented: "comments on your tasks",
+      archived: "your tasks put away",
+      decisions: "decisions waiting on you",
+      agents: "your agent accounts",
+    },
+    nothing: "nothing",
+    now: "as it happens",
+    daily: (at) => `in one message a day at ${at}`,
+    assigned: (actor, task) => `${actor} gave you ${task}.`,
+    changed: (actor, task, what) => `${actor} changed ${what} of ${task}.`,
+    moved: (actor, task, state) => `${actor} moved ${task} to ${state}.`,
+    commented: (actor, task, excerpt) =>
+      excerpt.length === 0
+        ? `${actor} commented on ${task}.`
+        : `${actor} commented on ${task}: ${excerpt}`,
+    archived: (actor, task) => `${actor} put ${task} away.`,
+    decision: (actor, question) => `${actor} asks you to decide: ${question}`,
+    agent: (account, state, detail) =>
+      detail.length === 0
+        ? `Your agent account ${account} ${state}.`
+        : `Your agent account ${account} ${state}: ${detail}`,
+    fields: {
+      title: "the title",
+      body: "the description",
+      startsOn: "the start",
+      dueOn: "the due day",
+    },
+    states: {
+      idea: "Idea",
+      ready: "Ready",
+      in_progress: "In progress",
+      in_review: "In review",
+      done: "Done",
+      dropped: "Dropped",
+    },
+    agentStates: {
+      stopped: "stopped",
+      refused: "was refused",
+      failed: "failed",
+      running: "runs again",
+    },
+    open: "Open on the console",
+    choose: "Choose what you are told",
+    turnOff: (kind) => `Turn off ${kind}`,
+    turnedOff: (kind, page) => `You are told nothing more of ${kind}. ${page}`,
+    dayTitle: (count) => `Your day: ${count}`,
+    more: (count) => `And ${count} more on the console.`,
+  },
 };
 
 const KO: ServerWords = {
@@ -387,7 +509,7 @@ const KO: ServerWords = {
     unknownRoute: "그런 경로가 없습니다.",
     unknownPerson: "콘솔에 그 로그인을 쓰는 사람이 없습니다.",
     oauthStale:
-      "설치가 여기서 시작되지 않았거나 15분을 넘겼습니다. 연결 페이지에서 다시 시작하세요.",
+      "콘솔이 준 설치 링크가 아니거나, 이미 쓴 링크이거나, 하루가 지났습니다. 메신저 담당에게 새 링크를 받으세요.",
     oauthRefused: (error) => `Slack이 앱을 설치하지 않았습니다: ${error}.`,
     appName: "앱 이름은 한 줄로, 35자까지 쓸 수 있습니다.",
     botName:
@@ -395,13 +517,40 @@ const KO: ServerWords = {
     icon: "아이콘은 Slack이 직접 가져갈 수 있는 공개 https 이미지 주소여야 합니다.",
     appNameRefused: (message) => `Slack이 앱 이름을 받지 않았습니다: ${message}`,
     botNameRefused: (message) => `Slack이 봇 이름을 받지 않았습니다: ${message}`,
+    unknownWorkspace: (team) => `앱이 설치된 워크스페이스 중에 ${team}이(가) 없습니다.`,
+    workspaceNeeded:
+      "앱이 여러 워크스페이스에 설치되어 있습니다. status에 나온 대로 --workspace로 하나를 정하세요.",
+    workspaceGone: (name) =>
+      `${name}에서 Slack 앱을 제거해 이제 그곳에는 아무것도 알리지 않습니다. 다시 설치하면 돌아옵니다.`,
+    tooManyWorkspaces:
+      "콘솔이 토큰을 보관할 수 있는 만큼 워크스페이스에 앱이 설치되어 있습니다. 다른 곳에 설치하려면 먼저 하나를 연결 해제하세요.",
+    orgInstall:
+      "앱은 Enterprise Grid 조직 전체가 아니라 워크스페이스 하나씩 설치합니다. 워크스페이스에 설치하세요.",
+    noPerson: "본인이 정하는 것입니다. 본인이나 본인의 에이전트로 정하세요.",
+    awaitingAccept: (name) =>
+      `${name}에 앱을 설치했습니다. 메신저 담당이 콘솔에서 수락하기 전에는 그곳에 아무것도 알리지 않습니다. 이 페이지는 닫아도 됩니다.`,
+    notPending: (team) => `수락을 기다리는 워크스페이스 중에 ${team}이(가) 없습니다.`,
+    busy: "그사이 앱 기록이 계속 바뀌었습니다. 다시 시도하세요.",
+    noticeAt: "하루 알림 시각은 09:00처럼 HH:MM으로 씁니다.",
+    noticeBoth: (kinds) => `${kinds}을(를) 켜고 끄기를 함께 할 수 없습니다.`,
   },
   said: {
     appMade: (url) =>
-      `Slack 앱을 만들었습니다. 워크스페이스에 앱을 설치할 수 있는 사람이 이 주소를 열어 설치하세요: ${url}`,
+      `Slack 앱을 만들었습니다. 워크스페이스에 앱을 설치할 수 있는 사람이 하루 안에 이 주소를 열어 설치하세요: ${url}`,
     appUpdated: (url) =>
-      `Slack 앱이 최신입니다. 워크스페이스에 설치하려면 이 주소를 여세요: ${url}`,
-    appInstalledUpdated: "Slack 앱이 최신이고 설치되어 있습니다.",
+      `Slack 앱이 최신입니다. 워크스페이스에 설치하려면 하루 안에 이 주소를 여세요: ${url}`,
+    installLink: (url) =>
+      `워크스페이스에 앱을 설치할 수 있는 사람이 하루 안에 이 주소를 열어 설치하세요. 한 번만 쓸 수 있습니다: ${url}`,
+    distribution: (url) =>
+      `앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 켜세요: ${url}`,
+    removed: (name) =>
+      `${name}에서 앱을 제거하고 그곳의 스레드를 닫았습니다. 다시 설치하면 채널 알림과 계정 연결이 돌아옵니다.`,
+    workspaceSaved: (name, isDefault, projects) =>
+      isDefault
+        ? `${name}이(가) 기본 워크스페이스입니다. 다른 곳에 정하지 않은 모든 프로젝트와, 여기에 정한 프로젝트 ${projects}개를 알립니다.`
+        : `${name}에는 여기에 정한 프로젝트 ${projects}개를 알립니다.`,
+    notices: (kinds, when) => `${kinds}을(를) ${when} 알려 드립니다.`,
+    accepted: (name) => `${name}을(를) 수락했습니다. 한 시간 안에 그곳 사람들의 계정을 연결합니다.`,
     names: (app, bot, handle) =>
       `Slack에서 앱 이름은 "${app}", 봇 이름은 "${bot}"${handle === null ? "" : `(@${handle})`}입니다.`,
     icon: {
@@ -416,12 +565,12 @@ const KO: ServerWords = {
       refused: (code) => `Slack이 아이콘을 받지 않았습니다: ${code}.`,
     },
     disconnected:
-      "워크스페이스에서 앱을 제거하고 지웠습니다. connect로 새 앱을 만들 수 있고, 다른 워크스페이스에도 연결할 수 있습니다.",
+      "모든 워크스페이스에서 앱을 제거하고 지웠습니다. connect로 새 앱을 만들 수 있습니다.",
     disconnectedAppLeft:
       "이제 이 앱을 쓰지 않지만, 설정 토큰으로 Slack에서 지우지는 못했습니다. api.slack.com/apps에서 지우세요. connect로 새 앱을 만들 수 있습니다.",
     testSent: (where) => `${where}에 시험 메시지를 보냈습니다.`,
-    matched: (matched, unmatched) =>
-      `이메일로 ${matched}명을 Slack 계정과 연결했습니다. ${unmatched}명은 계정이 없습니다.`,
+    matched: (workspace, matched, unmatched) =>
+      `${workspace}에서 이메일로 ${matched}명을 Slack 계정과 연결했습니다. ${unmatched}명은 그곳에 계정이 없습니다.`,
     matchedOne: (name) => `${name} 님을 Slack 계정과 연결했습니다.`,
     notMatchedOne: (name) => `${name} 님의 이메일로 된 Slack 계정이 없습니다.`,
     routeSaved: (id, channel) => `경로 ${id}: #${channel}(으)로 보냅니다.`,
@@ -434,7 +583,9 @@ const KO: ServerWords = {
       "관리자가 앱 설정 토큰과 갱신 토큰을 넣어야 합니다. api.slack.com/apps의 Your App Configuration Tokens에서 만들어, 플러그인 설정 페이지나 자기 터미널의 `console plugin messenger secret slackConfigToken`과 `slackConfigRefreshToken`으로 넣습니다.",
     app: "연결 페이지나 `connect`로 앱을 만드세요. 앱 이름, 봇 이름, 아이콘은 그때 정합니다.",
     install:
-      "워크스페이스에 앱을 설치할 수 있는 사람이 `connect`가 주는 주소를 15분 안에, 콘솔에 로그인한 브라우저에서 열어 승인해야 합니다.",
+      "워크스페이스에 앱을 설치할 수 있는 사람이 `connect`나 `install`이 주는 주소를 하루 안에 열어 승인해야 합니다.",
+    accept: (names) =>
+      `${names}에 앱이 설치되어 수락을 기다립니다. 우리 워크스페이스가 맞으면 연결 페이지나 \`workspace <id> --accept\`로 수락하고, 아니면 연결을 해제하세요.`,
     hrRole:
       "플러그인 설정 페이지에서 HR의 역할 `hr`을 메신저에 부여하세요. 그 전에는 단축키는 되지만 결재 스레드가 시작되지 않습니다.",
     noEmail: (count) =>
@@ -556,6 +707,54 @@ const KO: ServerWords = {
     q4: "오후 후반 반반차",
   },
   decisions: "결정",
+  notice: {
+    kinds: {
+      assigned: "나에게 맡겨진 태스크",
+      moved: "내 태스크의 상태 이동",
+      changed: "내 태스크의 변경",
+      commented: "내 태스크의 댓글",
+      archived: "내 태스크의 보관",
+      decisions: "나를 기다리는 결정",
+      agents: "내 에이전트 계정",
+    },
+    nothing: "아무것도",
+    now: "그때그때",
+    daily: (at) => `하루 한 번 ${at}에 모아서`,
+    assigned: (actor, task) => `${actor} 님이 ${task}을(를) 맡겼습니다.`,
+    changed: (actor, task, what) => `${actor} 님이 ${task}의 ${what}을(를) 바꿨습니다.`,
+    moved: (actor, task, state) => `${actor} 님이 ${task}을(를) ${state}(으)로 옮겼습니다.`,
+    commented: (actor, task, excerpt) =>
+      excerpt.length === 0
+        ? `${actor} 님이 ${task}에 댓글을 달았습니다.`
+        : `${actor} 님이 ${task}에 댓글을 달았습니다: ${excerpt}`,
+    archived: (actor, task) => `${actor} 님이 ${task}을(를) 보관했습니다.`,
+    decision: (actor, question) => `${actor} 님이 결정을 요청합니다: ${question}`,
+    agent: (account, state, detail) =>
+      detail.length === 0
+        ? `내 에이전트 계정 ${account}이(가) ${state}.`
+        : `내 에이전트 계정 ${account}이(가) ${state}: ${detail}`,
+    fields: { title: "제목", body: "설명", startsOn: "시작일", dueOn: "마감일" },
+    states: {
+      idea: "아이디어",
+      ready: "준비",
+      in_progress: "진행 중",
+      in_review: "검토 중",
+      done: "완료",
+      dropped: "중단",
+    },
+    agentStates: {
+      stopped: "멈췄습니다",
+      refused: "거절되었습니다",
+      failed: "실패했습니다",
+      running: "다시 돌아갑니다",
+    },
+    open: "콘솔에서 열기",
+    choose: "받을 알림 정하기",
+    turnOff: (kind) => `${kind} 알림 끄기`,
+    turnedOff: (kind, page) => `이제 ${kind} 알림을 보내지 않습니다. ${page}`,
+    dayTitle: (count) => `오늘의 알림 ${count}건`,
+    more: (count) => `나머지 ${count}건은 콘솔에서 보세요.`,
+  },
 };
 
 const PACKS: Readonly<Record<Language, ServerWords>> = { en: EN, ko: KO };

@@ -5,15 +5,15 @@
     "ko": "메신저"
   },
   "description": {
-    "en": "Tells people in Slack what the console's plugins have for them and brings back what they do there: for HR, time off requested and cancelled in the chat, approvals threaded with whoever decides.",
-    "ko": "콘솔의 플러그인이 사람들에게 전할 것을 Slack으로 보내고, 거기서 한 일을 콘솔로 가져옵니다. HR은 채팅에서 휴가를 신청하고 취소하며, 결재는 결재자와 함께 스레드로 이어집니다."
+    "en": "Tells people in Slack of their own work, as each chooses, and what the console's plugins have for them, and brings back what they do there: time off requested in the chat, approvals threaded.",
+    "ko": "콘솔의 플러그인이 사람들에게 전할 것과 각자 고른 자기 일의 소식을 Slack으로 보내고, 거기서 한 일을 콘솔로 가져옵니다. HR은 채팅에서 휴가를 신청하고 취소하며, 결재는 결재자와 함께 스레드로 이어집니다."
   },
   "agentNote": {
-    "en": "Connects the workspace's Slack, matches people to their accounts and routes plugin events to channels; for whoever keeps the messenger.",
-    "ko": "워크스페이스의 Slack을 연결하고, 사람을 Slack 계정과 맞추고, 플러그인 알림을 채널로 보냅니다. 메신저 담당이 씁니다."
+    "en": "Connects Slack workspaces, matches people to their accounts and routes plugin events to channels, for whoever keeps the messenger; tells each person of their own work as they choose (notify, notices).",
+    "ko": "Slack 워크스페이스를 연결하고, 사람을 Slack 계정과 맞추고, 플러그인 알림을 채널로 보냅니다(메신저 담당). 각자 고른 대로 자기 일의 소식을 보냅니다(notify, notices)."
   },
   "pluginApi": 1,
-  "console": ">=0.5.0 <0.6.0",
+  "console": ">=0.5.1 <0.6.0",
   "server": "dist/server/index.js",
   "web": "dist/web",
   "skills": "skills",
@@ -22,6 +22,8 @@
     "people:read:all",
     "people:read:email",
     "people:act",
+    "projects:read",
+    "board:read",
     "events:console",
     "events:plugins",
     "jobs",
@@ -31,6 +33,16 @@
   ],
   "optionalCapabilities": ["plugins:hr"],
   "roles": {
+    "member": {
+      "name": {
+        "en": "Member",
+        "ko": "구성원"
+      },
+      "description": {
+        "en": "Chooses what they are told in Slack of their own work: tasks, decisions, their agent accounts.",
+        "ko": "자기 일(태스크, 결정, 내 에이전트 계정) 가운데 무엇을 Slack으로 받을지 정합니다."
+      }
+    },
     "messenger": {
       "name": {
         "en": "Messenger",
@@ -42,6 +54,7 @@
       }
     }
   },
+  "defaultRole": "member",
   "grants": {
     "hr": {
       "roles": ["hr"],
@@ -130,13 +143,14 @@
       "type": "secret",
       "group": "slack",
       "hosts": ["slack.com"],
+      "keyed": { "max": 50 },
       "name": {
         "en": "Bot token",
         "ko": "봇 토큰"
       },
       "description": {
-        "en": "Sealed by the console when the app is installed in the workspace: nothing to paste.",
-        "ko": "앱을 워크스페이스에 설치할 때 콘솔이 받아 저장합니다. 붙여 넣을 것이 없습니다."
+        "en": "One for each workspace the app is installed in, under the workspace's id: sealed by the console at each installation, nothing to paste.",
+        "ko": "앱을 설치한 워크스페이스마다 하나씩, 워크스페이스 ID로 보관합니다. 설치할 때마다 콘솔이 받아 저장하므로 붙여 넣을 것이 없습니다."
       }
     }
   ],
@@ -176,6 +190,24 @@
       "wide": true
     },
     {
+      "key": "notifications",
+      "name": {
+        "en": "My notifications",
+        "ko": "내 알림"
+      },
+      "level": "workspace",
+      "roles": ["member"]
+    },
+    {
+      "key": "slack",
+      "name": {
+        "en": "Slack",
+        "ko": "Slack 알림"
+      },
+      "level": "project",
+      "roles": ["member"]
+    },
+    {
       "key": "activity",
       "name": {
         "en": "Activity",
@@ -186,7 +218,7 @@
       "wide": true
     }
   ],
-  "dataVersion": 2,
+  "dataVersion": 3,
   "store": {
     "homepage": "https://github.com/skillcdn/console-plugins/tree/main/plugins/messenger#readme",
     "repository": "https://github.com/skillcdn/console-plugins",

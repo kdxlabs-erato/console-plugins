@@ -89,11 +89,30 @@ export async function renderPeople(
         void draw();
       },
     );
+    // One account by its name; several each with its workspace, one under another.
+    const teamName = new Map(
+      report.workspaces.map((workspace) => [
+        workspace.teamId,
+        workspace.teamName ?? workspace.teamId,
+      ]),
+    );
+    const accounts = (slack: PeopleReport["people"][number]["slack"]): Node => {
+      if (report.workspaces.length <= 1) {
+        return document.createTextNode(slack.map((account) => account.name).join(", "));
+      }
+      const list = el("span", "accounts");
+      for (const account of slack) {
+        list.append(
+          el("span", "", w.accountIn(account.name, teamName.get(account.teamId) ?? account.teamId)),
+        );
+      }
+      return list;
+    };
     const rows = report.people.map((match) =>
       row([
         who(frame, match.person),
         badge(w.states[match.state], TONES[match.state]),
-        match.slack === null ? muted(w.stateHints[match.state]) : match.slack.name,
+        match.slack.length === 0 ? muted(w.stateHints[match.state]) : accounts(match.slack),
       ]),
     );
     parts.push(

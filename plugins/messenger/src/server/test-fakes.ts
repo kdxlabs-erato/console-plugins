@@ -24,7 +24,11 @@ export interface SlackCall {
   readonly url: string;
   readonly params: Readonly<Record<string, string>>;
   readonly json: unknown;
-  readonly secrets: readonly { readonly name: string; readonly as: string }[];
+  readonly secrets: readonly {
+    readonly name: string;
+    readonly key?: string | undefined;
+    readonly as: string;
+  }[];
   readonly seal: Readonly<Record<string, unknown>> | undefined;
 }
 
@@ -54,26 +58,55 @@ function answer(
   };
 }
 
-/** Seals what `seal` names as the console does: the value out, `[sealed]` in its place. */
+/** The value at a path of an answer (`$.team.id`), and the object that holds it. */
+function at(
+  body: Record<string, unknown>,
+  path: string,
+): { readonly parent: Record<string, unknown> | undefined; readonly last: string } {
+  const parts = path.replace(/^\$\.?/, "").split(".");
+  let parent: Record<string, unknown> | undefined = body;
+  for (const part of parts.slice(0, -1)) {
+    const next: unknown = parent?.[part];
+    parent =
+      typeof next === "object" && next !== null ? (next as Record<string, unknown>) : undefined;
+  }
+  return { parent, last: parts.at(-1) ?? "" };
+}
+
+/**
+ * Seals what `seal` names as the console does: the value out, `[sealed]` in its place; a keyed
+ * secret's key read from the same answer, `no_key` where it is not there. An outcome a test gives
+ * stands in for the console's (`too_many`, say).
+ */
 function sealed(
   body: unknown,
   seal: Readonly<Record<string, unknown>>,
+  forced: Readonly<Record<string, SealOutcome>>,
 ): { readonly body: unknown; readonly outcomes: Record<string, SealOutcome> } {
   const copy = structuredClone(body) as Record<string, unknown>;
   const outcomes: Record<string, SealOutcome> = {};
   for (const [name, spec] of Object.entries(seal)) {
     const path = typeof spec === "string" ? spec : (spec as { path: string }).path;
-    const parts = path.replace(/^\$\.?/, "").split(".");
-    let parent: Record<string, unknown> | undefined = copy;
-    for (const part of parts.slice(0, -1)) {
-      const next: unknown = parent?.[part];
-      parent =
-        typeof next === "object" && next !== null ? (next as Record<string, unknown>) : undefined;
-    }
-    const last = parts.at(-1) ?? "";
+    const key = typeof spec === "string" ? undefined : (spec as { key?: string }).key;
+    const { parent, last } = at(copy, path);
     const value = parent?.[last];
-    if (parent === undefined || value === undefined || value === null || value === "") {
+    const keyFound =
+      key === undefined || !key.startsWith("$")
+        ? true
+        : (() => {
+            const place = at(copy, key);
+            const found = place.parent?.[place.last];
+            return typeof found === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(found);
+          })();
+    const force = forced[name];
+    if (force !== undefined && parent !== undefined && value !== undefined) {
+      outcomes[name] = force;
+      parent[last] = force === "sealed" ? "[sealed]" : "[withheld]";
+    } else if (parent === undefined || value === undefined || value === null || value === "") {
       outcomes[name] = "absent";
+    } else if (!keyFound) {
+      outcomes[name] = "no_key";
+      parent[last] = "[withheld]";
     } else if (typeof value !== "string") {
       outcomes[name] = "not_a_string";
       parent[last] = "[withheld]";
@@ -88,6 +121,7 @@ function sealed(
 /** A Slack for a test: the methods it gives, the usual answers for the rest, every call kept. */
 export function fakeSlack(
   given: Readonly<Record<string, (params: Readonly<Record<string, string>>) => SlackReply>> = {},
+  options: { readonly sealed?: Readonly<Record<string, SealOutcome>> } = {},
 ) {
   const calls: SlackCall[] = [];
   let counter = 1000;
@@ -141,7 +175,7 @@ export function fakeSlack(
     const headers = own?.headers ?? { "content-type": "application/json" };
     const body = own === null ? reply : own.body;
     if (init?.seal !== undefined && typeof body === "object" && body !== null) {
-      const done = sealed(body, init.seal);
+      const done = sealed(body, init.seal, options.sealed ?? {});
       return answer(status, headers, done.body, done.outcomes);
     }
     return answer(status, headers, body);
@@ -162,6 +196,7 @@ export interface FakePerson {
   readonly email: string | null;
   readonly language: string | null;
   readonly status?: "active" | "deactivated";
+  readonly managerId?: string | null;
 }
 
 /** A person as the console hands one to a plugin. */
@@ -175,7 +210,7 @@ export function restPerson(person: FakePerson) {
     status: person.status ?? ("active" as const),
     source: "organization" as const,
     deactivatedAt: null,
-    managerId: null,
+    managerId: person.managerId ?? null,
     teams: [],
     language: person.language,
     email: person.email,
@@ -240,6 +275,26 @@ export const STRANGER: PluginCaller = {
 };
 
 export const CONSOLE: PluginCaller = { kind: "console", roles: ["messenger"], project: null };
+
+/** A member, who holds the role every member holds and no other. */
+export const MEMBER_MINSU: PluginCaller = {
+  kind: "person",
+  person: { id: MINSU.id, login: MINSU.login, name: MINSU.name, language: "ko", admin: false },
+  agent: null,
+  roles: ["member"],
+  run: null,
+  project: null,
+};
+
+/** Another member, reading in English. */
+export const MEMBER_JIHYE: PluginCaller = {
+  kind: "person",
+  person: { id: JIHYE.id, login: JIHYE.login, name: JIHYE.name, language: "en", admin: false },
+  agent: null,
+  roles: ["member"],
+  run: null,
+  project: null,
+};
 
 /** HR as its contract answers, for itself or for a person, every call kept. */
 export function fakeHr(
@@ -380,13 +435,21 @@ export function setup(
     readonly people?: readonly FakePerson[];
     readonly slack?: FakeSlack;
     readonly hr?: FakeHr;
-    readonly secrets?: Readonly<Record<string, string>>;
+    readonly secrets?: Readonly<Record<string, string | Readonly<Record<string, string>>>>;
     readonly url?: string | null;
     readonly capabilities?: readonly string[];
     readonly grants?: readonly { readonly plugin: string; readonly role: string }[];
     readonly answer?: (decisionId: string, personId: string) => void;
     /** The language an administrator set for the workspace; none set unless said. */
     readonly workspaceLanguage?: "en" | "ko";
+    /** The console's clock; the tests' moment unless said. */
+    readonly now?: () => Date;
+    /** The boards as the console answers them: tasks, decisions and projects. */
+    readonly board?: {
+      readonly tasks?: { readonly get?: (project: string, number: number) => Promise<unknown> };
+      readonly decisions?: { readonly get?: (id: string) => Promise<unknown> };
+      readonly projects?: { readonly list?: () => Promise<unknown[]> };
+    };
   } = {},
 ): Setup {
   const people = (options.people ?? [MINSU, JIHYE, HANA, NOMAIL]).map(restPerson);
@@ -436,7 +499,14 @@ export function setup(
           ),
         get: async (id) => people.find((person) => person.id === id) ?? null,
       },
+      ...(options.board?.tasks === undefined ? {} : { tasks: options.board.tasks as never }),
+      ...(options.board?.projects === undefined
+        ? {}
+        : { projects: options.board.projects as never }),
       decisions: {
+        ...(options.board?.decisions?.get === undefined
+          ? {}
+          : { get: options.board.decisions.get as never }),
         answer: async (decisionId, given, as) => {
           options.answer?.(decisionId, as.for);
           answered.push({ decisionId, answer: given, for: as.for });
@@ -450,12 +520,12 @@ export function setup(
       slackConfigRefreshToken: "test-refresh-value",
       slackClientSecret: "test-client-value",
       slackSigningSecret: SIGNING,
-      slackBotToken: "test-bot-value",
+      slackBotToken: { [TEAM]: "test-bot-value" },
     },
     plugins: { hr: hr.plugin },
     ...(url === null ? {} : { publicUrl: url }),
     endpoints: ["slack", "slack-oauth"],
-    now: () => NOW,
+    now: options.now ?? (() => NOW),
   });
   return { ctx, slack, hr, answered };
 }
@@ -485,36 +555,62 @@ export function signedRequest(
   };
 }
 
-/** A connection installed in a workspace, as the installation leaves one. */
-export async function connected(ctx: TestContext, language: "en" | "ko" = "ko"): Promise<void> {
-  await ctx.records("connections").create({
+/** The app made, as `connect` leaves it. */
+export async function made(ctx: TestContext, language: "en" | "ko" = "ko"): Promise<void> {
+  if (ctx.all("apps").length > 0) {
+    return;
+  }
+  await ctx.records("apps").create({
     provider: "slack",
-    phase: "connected",
     appId: "A0TESTAPP",
     clientId: "1111.2222",
-    teamId: TEAM,
-    teamName: "Acme",
-    botUserId: "U0BOT0001",
     language,
     appName: null,
     botName: null,
-    botHandle: "console",
     iconUrl: null,
     iconSetUrl: null,
     iconProblem: null,
     shortcut: true,
     manifestDigest: null,
     manifestAt: null,
-    oauthState: null,
-    oauthUntil: null,
+    installs: [],
+    problem: null,
+    problemAt: null,
+    rotatedAt: null,
+  });
+}
+
+/**
+ * The app made and installed in a workspace, as an installation leaves it: the test's own unless
+ * said, the default where it is the first.
+ */
+export async function connected(
+  ctx: TestContext,
+  language: "en" | "ko" = "ko",
+  team: { readonly id: string; readonly name: string; readonly bot?: string } = {
+    id: TEAM,
+    name: "Acme",
+  },
+): Promise<void> {
+  await made(ctx, language);
+  const first = ctx.all("connections").length === 0;
+  await ctx.records("connections").create({
+    provider: "slack",
+    teamId: team.id,
+    teamName: team.name,
+    botUserId: team.bot ?? "U0BOT0001",
+    botHandle: "console",
+    state: "connected",
+    default: first,
+    projects: [],
     connectedAt: NOW.toISOString(),
     connectedBy: JIHYE.id,
+    installedBy: null,
     problem: null,
     problemAt: null,
     matchedAt: NOW.toISOString(),
     matched: 0,
     unmatched: 0,
-    rotatedAt: null,
   });
 }
 
@@ -524,11 +620,12 @@ export async function linked(
   person: FakePerson,
   memberId: string,
   image: string | null = "https://avatars.example.test/a.png",
+  team: string = TEAM,
 ): Promise<void> {
   await ctx.records("links").create({
     personId: person.id,
     memberId,
-    teamId: TEAM,
+    teamId: team,
     name: person.name ?? person.login,
     image,
     matchedAt: NOW.toISOString(),

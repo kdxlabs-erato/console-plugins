@@ -228,13 +228,31 @@ describe("the signature", () => {
     expect((await slackEndpoint.run(ctx, empty)).status).toBe(401);
   });
 
-  it("passes over a press from another workspace", async () => {
+  it("passes over a press from a workspace the app is not installed in", async () => {
     const { ctx, slack } = setup();
     await connected(ctx);
     await linked(ctx, MINSU, "U0MINSU01");
     const answer = await slackEndpoint.run(ctx, signedRequest(shortcut("U0MINSU01", "T0OTHER01")));
     expect(answer.status).toBe(200);
     expect(slack.calls).toHaveLength(0);
+    // Nor is a payload that names no workspace read further.
+    const bare = await slackEndpoint.run(ctx, signedRequest({ type: "shortcut", user: 5 }));
+    expect(bare.status).toBe(200);
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  it("answers a press in the workspace it came from, the presser matched by their account there", async () => {
+    const { ctx, slack, hr } = setup();
+    await connected(ctx);
+    await connected(ctx, "ko", { id: "T0OTHER01", name: "Other" });
+    // The same member id in the default workspace is someone else's: the press is the other's.
+    await linked(ctx, JIHYE, "U0MINSU01");
+    await linked(ctx, MINSU, "U0MINSU01", null, "T0OTHER01");
+    await slackEndpoint.run(ctx, signedRequest(shortcut("U0MINSU01", "T0OTHER01")));
+    expect(hr.calls[0]?.as).toBe(MINSU.id);
+    expect(slack.of("views.open")[0]?.secrets).toEqual([
+      { name: "slackBotToken", key: "T0OTHER01", as: "bearer" },
+    ]);
   });
 });
 
@@ -379,6 +397,16 @@ describe("the form's submission", () => {
         input: { type: "annual", from: "2026-11-20", to: "2026-11-21", reason: "Family trip" },
       },
     ]);
+    // The workspace it was made in is kept, for its thread to be begun there; nothing is written in Slack.
+    expect(ctx.all("threads")[0]?.data).toMatchObject({
+      plugin: "hr",
+      thing: "req-new",
+      personId: MINSU.id,
+      teamId: TEAM,
+      channelId: null,
+      rootTs: null,
+      steps: [],
+    });
   });
 
   it("says HR's refusal beside the field, in the person's words", async () => {

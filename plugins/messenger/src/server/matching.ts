@@ -1,8 +1,10 @@
-// People matched to their Slack accounts by email (ADR-0009, point 5): the console's directory,
-// where an address is the one a person signs in with at Google or the one an administrator wrote,
-// against the workspace's members, listed once a page of two hundred at a time, since the
-// console holds a plugin to sixty requests a minute; one person looked up alone when the console
-// says their address changed or they came back. Nothing is matched by a name.
+// People matched to their Slack accounts by email (ADR-0009, point 5), in each workspace the app is
+// installed in, so that a person may have an account in several (ADR-0014): the console's
+// directory, where an address is the one a person signs in with at Google or the one an
+// administrator wrote, against a workspace's members, listed once a page of two hundred at a time,
+// since the console holds a plugin to sixty requests a minute; one person looked up alone in each
+// workspace when the console says their address changed or they came back. Nothing is matched by
+// a name.
 import {
   arg,
   defineCommand,
@@ -16,10 +18,11 @@ import type { MatchState, PeopleReport, PersonMatch } from "../shared/contracts.
 import { ROLE, requireRole } from "./access.js";
 import { type LinkData, links } from "./collections.js";
 import { nameOf } from "./people.js";
-import { refusalOf, SlackError, slack } from "./slack/api.js";
+import { bot, refusalOf, SlackError, slack } from "./slack/api.js";
 import {
   type ConnectionRecord,
-  connectionOf,
+  connectedTeam,
+  connectionsOf,
   isConnected,
   type LinkRecord,
   saveConnection,
@@ -55,7 +58,10 @@ const membersPage = z.object({
 /** At most this many pages of members are read in one matching: ten thousand people. */
 const PAGES_AT_MOST = 50;
 
-/** What a link keeps of an account: the name it goes by in Slack and its picture. */
+/**
+ * What a link keeps of an account: the name it goes by in Slack and its picture, in the workspace
+ * it was found in, whatever workspace the member says it comes from (a member shared from another).
+ */
 function accountOf(found: Member, teamId: string): Omit<LinkData, "personId" | "matchedAt"> {
   const profile = found.profile ?? {};
   const name =
@@ -63,20 +69,25 @@ function accountOf(found: Member, teamId: string): Omit<LinkData, "personId" | "
       (candidate) => candidate !== undefined && candidate.trim().length > 0,
     ) ?? found.id;
   const image = profile.image_192?.startsWith("https://") === true ? profile.image_192 : null;
-  return { memberId: found.id, teamId: found.team_id ?? teamId, name: name.trim(), image };
+  return { memberId: found.id, teamId, name: name.trim(), image };
 }
 
 function usable(found: Member): boolean {
   return found.deleted !== true && found.is_bot !== true && found.id !== "USLACKBOT";
 }
 
-/** The workspace's members by their address, lowercase. */
-async function membersByEmail(ctx: PluginContext): Promise<Map<string, Member>> {
+/** A workspace's members by their address, lowercase. */
+async function membersByEmail(ctx: PluginContext, teamId: string): Promise<Map<string, Member>> {
   const found = new Map<string, Member>();
   let cursor: string | undefined;
   for (let page = 0; page < PAGES_AT_MOST; page += 1) {
     const answer = membersPage.parse(
-      await slack(ctx, "users.list", { limit: 200, ...(cursor === undefined ? {} : { cursor }) }),
+      await slack(
+        ctx,
+        "users.list",
+        { limit: 200, ...(cursor === undefined ? {} : { cursor }) },
+        bot(teamId),
+      ),
     );
     for (const raw of answer.members) {
       const parsed = member.safeParse(raw);
@@ -93,22 +104,42 @@ async function membersByEmail(ctx: PluginContext): Promise<Map<string, Member>> 
   return found;
 }
 
-/** Every link, archived ones too, by the person's id. */
-async function allLinks(ctx: PluginContext): Promise<Map<string, LinkRecord>> {
+/** Every link of a workspace, archived ones too, by the person's id. */
+async function linksOfTeam(ctx: PluginContext, teamId: string): Promise<Map<string, LinkRecord>> {
   const found = new Map<string, LinkRecord>();
   let after: string | undefined;
   do {
     const page = await ctx.records(links).list({
+      where: { teamId },
       archived: true,
       limit: 200,
       ...(after === undefined ? {} : { after }),
     });
     for (const record of page.items) {
       const kept = found.get(record.data.personId);
-      // A person keeps one link; where two were ever written, the live one counts.
+      // A person keeps one link in a workspace; where two were ever written, the live one counts.
       if (kept === undefined || (kept.archivedAt !== null && record.archivedAt === null)) {
         found.set(record.data.personId, record);
       }
+    }
+    after = page.after ?? undefined;
+  } while (after !== undefined);
+  return found;
+}
+
+/** Every live link, by the person's id and then the workspace's. */
+async function liveLinks(ctx: PluginContext): Promise<Map<string, Map<string, LinkRecord>>> {
+  const found = new Map<string, Map<string, LinkRecord>>();
+  let after: string | undefined;
+  do {
+    const page = await ctx.records(links).list({
+      limit: 200,
+      ...(after === undefined ? {} : { after }),
+    });
+    for (const record of page.items) {
+      const own = found.get(record.data.personId) ?? new Map<string, LinkRecord>();
+      own.set(record.data.teamId, record);
+      found.set(record.data.personId, own);
     }
     after = page.after ?? undefined;
   } while (after !== undefined);
@@ -158,15 +189,18 @@ export async function withoutEmail(ctx: PluginContext): Promise<number> {
     .filter((person) => (person.email?.trim() ?? "").length === 0).length;
 }
 
-/** Matches everyone the caller sees; answers how many have an account and how many have none. */
+/**
+ * Matches everyone the caller sees in one workspace; answers how many have an account there and
+ * how many have none.
+ */
 export async function matchEveryone(
   ctx: PluginContext,
   connection: ConnectionRecord,
 ): Promise<{ readonly matched: number; readonly unmatched: number }> {
-  const teamId = connection.data.teamId ?? "";
+  const teamId = connection.data.teamId;
   const people = (await ctx.console.people.list()).filter(active);
-  const members = await membersByEmail(ctx);
-  const existing = await allLinks(ctx);
+  const members = await membersByEmail(ctx, teamId);
+  const existing = await linksOfTeam(ctx, teamId);
   let matched = 0;
   for (const person of people) {
     const email = person.email?.trim().toLowerCase();
@@ -185,64 +219,142 @@ export async function matchEveryone(
     }
   }
   const unmatched = people.length - matched;
-  await saveConnection(ctx, { matchedAt: ctx.now().toISOString(), matched, unmatched });
+  await saveConnection(ctx, teamId, { matchedAt: ctx.now().toISOString(), matched, unmatched });
   return { matched, unmatched };
 }
 
-/** Matches one person again, by their address now; answers whether they have an account. */
-export async function matchOne(ctx: PluginContext, personId: string): Promise<boolean> {
-  const existing = (await allLinks(ctx)).get(personId);
+/**
+ * Matches one person again, by their address now, in every workspace the app is installed in, or
+ * the one named; answers how many workspaces they have an account in.
+ */
+export async function matchOne(
+  ctx: PluginContext,
+  personId: string,
+  only: ConnectionRecord | null = null,
+): Promise<number> {
   const person = await ctx.console.people.get(personId);
   const email = person?.email?.trim().toLowerCase();
-  if (person === null || !active(person) || email === undefined || email.length === 0) {
-    await dropLink(ctx, existing);
-    return false;
-  }
-  const connection = await connectionOf(ctx);
-  try {
-    const answer = await slack(ctx, "users.lookupByEmail", { email });
-    const found = member.safeParse(answer.user);
-    if (!found.success || !usable(found.data)) {
+  const usableEmail =
+    person !== null && active(person) && email !== undefined && email.length > 0 ? email : null;
+  const where = only === null ? await connectionsOf(ctx) : [only];
+  let found = 0;
+  for (const connection of where) {
+    const teamId = connection.data.teamId;
+    const existing = (await linksOfTeam(ctx, teamId)).get(personId);
+    if (usableEmail === null) {
       await dropLink(ctx, existing);
-      return false;
+      continue;
     }
-    await keepLink(ctx, personId, accountOf(found.data, connection?.data.teamId ?? ""), existing);
-    return true;
-  } catch (error) {
-    if (error instanceof SlackError && error.code === "users_not_found") {
-      await dropLink(ctx, existing);
-      return false;
+    try {
+      const answer = await slack(ctx, "users.lookupByEmail", { email: usableEmail }, bot(teamId));
+      const account = member.safeParse(answer.user);
+      if (!account.success || !usable(account.data)) {
+        await dropLink(ctx, existing);
+        continue;
+      }
+      await keepLink(ctx, personId, accountOf(account.data, teamId), existing);
+      found += 1;
+    } catch (error) {
+      if (error instanceof SlackError && error.code === "users_not_found") {
+        await dropLink(ctx, existing);
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
+  return found;
 }
 
+/** The workspace a command names, connected; refused where the app is not installed there. */
+export async function namedWorkspace(
+  ctx: PluginContext,
+  teamId: string,
+): Promise<ConnectionRecord> {
+  const found = await connectedTeam(ctx, teamId.trim().toUpperCase());
+  if (found === null) {
+    throw new PluginError(
+      "unknown_workspace",
+      serverWords(ctx.language).refused.unknownWorkspace(teamId),
+    );
+  }
+  return found;
+}
+
+/**
+ * The workspace a command is about: the one named, else the only one the app is installed in;
+ * refused where there is none, or several and none was named.
+ */
+export async function chosenWorkspace(
+  ctx: PluginContext,
+  teamId: string | undefined,
+): Promise<ConnectionRecord> {
+  if (teamId !== undefined) {
+    return namedWorkspace(ctx, teamId);
+  }
+  const words = serverWords(ctx.language).refused;
+  const connected = await connectionsOf(ctx);
+  const only = connected[0];
+  if (only === undefined) {
+    throw new PluginError("not_connected", words.notConnected);
+  }
+  if (connected.length > 1) {
+    throw new PluginError("workspace_needed", words.workspaceNeeded);
+  }
+  return only;
+}
+
+export const workspaceArg = arg.text({
+  about: "the workspace's id in Slack (T0123ABCD), as status lists them; every one unless said",
+  optional: true,
+  max: 40,
+});
+
 export const match = defineCommand({
-  about: "Matches people to their Slack accounts by email: everyone, or one person.",
+  about: "Matches people to their Slack accounts by email, in each workspace or one.",
   args: {
     person: arg.person({ about: "one person, by login; everyone unless said", optional: true }),
+    workspace: workspaceArg,
   },
   roles: [ROLE],
   async run(ctx, args) {
     requireRole(ctx);
     const words = serverWords(ctx.language);
-    const connection = await connectionOf(ctx);
-    if (!isConnected(connection)) {
+    const where =
+      args.workspace === undefined
+        ? await connectionsOf(ctx)
+        : [await namedWorkspace(ctx, args.workspace)];
+    if (where.length === 0) {
       throw new PluginError("not_connected", words.refused.notConnected);
     }
     try {
       if (args.person !== undefined) {
-        const found = await matchOne(ctx, args.person.id);
+        const found = await matchOne(
+          ctx,
+          args.person.id,
+          args.workspace === undefined ? null : (where[0] ?? null),
+        );
         const name = args.person.name ?? args.person.login;
         return {
-          text: found ? words.said.matchedOne(name) : words.said.notMatchedOne(name),
-          data: { person: args.person.id, matched: found },
+          text: found > 0 ? words.said.matchedOne(name) : words.said.notMatchedOne(name),
+          data: { person: args.person.id, matched: found > 0, workspaces: found },
         };
       }
-      const counts = await matchEveryone(ctx, connection);
+      const counts: { teamId: string; matched: number; unmatched: number }[] = [];
+      for (const connection of where) {
+        const done = await matchEveryone(ctx, connection);
+        counts.push({ teamId: connection.data.teamId, ...done });
+      }
       return {
-        text: words.said.matched(String(counts.matched), String(counts.unmatched)),
-        data: counts,
+        text: where
+          .map((connection, index) =>
+            words.said.matched(
+              connection.data.teamName ?? connection.data.teamId,
+              String(counts[index]?.matched ?? 0),
+              String(counts[index]?.unmatched ?? 0),
+            ),
+          )
+          .join("\n"),
+        data: { workspaces: counts },
       };
     } catch (error) {
       throw refusalOf(ctx, error);
@@ -255,11 +367,16 @@ const STATES: readonly MatchState[] = ["matched", "no_email", "no_account", "not
 const ORDER: readonly MatchState[] = ["no_email", "no_account", "not_checked", "matched"];
 
 export const people = defineQuery({
-  about: "Who is matched to a Slack account, and why the others are not.",
+  about: "Who is matched to a Slack account in each workspace, and why the others are not.",
   args: {
     state: arg.enum(["matched", "no_email", "no_account", "not_checked"], {
       about: "only the people in this state; everyone unless said",
       optional: true,
+    }),
+    workspace: arg.text({
+      about: "matched in this workspace (T0123ABCD) alone; in any unless said",
+      optional: true,
+      max: 40,
     }),
     limit: arg.number({
       about: "how many people to list; twenty unless said",
@@ -272,27 +389,37 @@ export const people = defineQuery({
   roles: [ROLE],
   async run(ctx, args): Promise<PeopleReport> {
     requireRole(ctx);
-    const connection = await connectionOf(ctx);
+    const connected = await connectionsOf(ctx);
+    const where =
+      args.workspace === undefined
+        ? connected
+        : connected.filter(
+            (connection) => connection.data.teamId === args.workspace?.trim().toUpperCase(),
+          );
+    const teams = new Set(where.map((connection) => connection.data.teamId));
     const everyone = (await ctx.console.people.list()).filter(active);
-    const kept = await allLinks(ctx);
+    const kept = await liveLinks(ctx);
+    const unchecked = where.some((connection) => connection.data.matchedAt === null);
     const rows: PersonMatch[] = everyone.map((person) => {
-      const record = kept.get(person.id);
       const brief = { id: person.id, login: person.login, name: person.name ?? null };
-      if (record !== undefined && record.archivedAt === null) {
-        return {
-          person: brief,
-          state: "matched",
-          slack: { memberId: record.data.memberId, name: record.data.name },
-        };
+      const accounts = [...(kept.get(person.id)?.values() ?? [])]
+        .filter((record) => teams.has(record.data.teamId))
+        .map((record) => ({
+          teamId: record.data.teamId,
+          memberId: record.data.memberId,
+          name: record.data.name,
+        }));
+      if (accounts.length > 0) {
+        return { person: brief, state: "matched", slack: accounts };
       }
       const email = person.email?.trim() ?? "";
       const state: MatchState =
         email.length === 0
           ? "no_email"
-          : connection?.data.matchedAt === null || connection === null
+          : where.length === 0 || unchecked
             ? "not_checked"
             : "no_account";
-      return { person: brief, state, slack: null };
+      return { person: brief, state, slack: [] };
     });
     const counts = Object.fromEntries(
       STATES.map((state) => [state, rows.filter((row) => row.state === state).length]),
@@ -304,9 +431,18 @@ export const people = defineQuery({
         const byState = args.state === undefined ? order(a) - order(b) : 0;
         return byState !== 0 ? byState : nameOf(a.person).localeCompare(nameOf(b.person));
       });
+    const times = where
+      .map((connection) => connection.data.matchedAt)
+      .filter((at): at is string => at !== null)
+      .sort();
     return {
-      connected: isConnected(connection),
-      matchedAt: connection?.data.matchedAt ?? null,
+      connected: connected.length > 0,
+      matchedAt: unchecked ? null : (times[0] ?? null),
+      workspaces: where.map((connection) => ({
+        teamId: connection.data.teamId,
+        teamName: connection.data.teamName,
+        matchedAt: connection.data.matchedAt,
+      })),
       counts,
       people: chosen.slice(0, args.limit ?? 20),
       total: chosen.length,
@@ -328,10 +464,10 @@ async function personOfEvent(
   return found.find((person) => person.login.toLowerCase() === login.toLowerCase()) ?? null;
 }
 
-/** A person's address changed, or they came back or left: their link follows. */
+/** A person's address changed, or they came back or left: their links follow, in every workspace. */
 export async function onPersonChanged(ctx: PluginContext, event: PluginHookEvent): Promise<void> {
-  const connection = await connectionOf(ctx);
-  if (!isConnected(connection)) {
+  const connected = await connectionsOf(ctx);
+  if (!connected.some(isConnected)) {
     return;
   }
   const person = await personOfEvent(ctx, event);

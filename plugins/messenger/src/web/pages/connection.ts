@@ -1,14 +1,16 @@
 // The connection page: the steps that connect Slack, each saying whether it is done and what is
-// left (the console's address, the configuration token, the app, its installation), then how the
-// connection stands, what HR is to the messenger, and a test message. Every press runs a command,
-// as an agent would; the installation opens Slack's own page from the press itself.
+// left (the console's address, the configuration token, the app, its installation in a workspace),
+// then the workspaces the app is installed in (ADR-0014), how the app stands, what HR is to the
+// messenger, and a test message. Every press runs a command, as an agent would; an installation
+// opens Slack's own page from the press itself, and its link is shown to be handed over.
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import {
+  FIXED_SECRETS,
   LANGUAGES,
   type Language,
   languageOf,
-  SECRETS,
   type StatusReport,
+  type WorkspaceView,
 } from "../../shared/contracts.js";
 import {
   badge,
@@ -18,6 +20,7 @@ import {
   DASH,
   dateTimeIn,
   el,
+  empty,
   errorBlock,
   factsPlain,
   field,
@@ -28,9 +31,12 @@ import {
   panel,
   panelWith,
   pills,
+  row,
   runCommand,
+  select,
   sequenced,
   statusLine,
+  table,
   toolbar,
   watch,
 } from "../ui.js";
@@ -75,21 +81,132 @@ function fields(...children: HTMLElement[]): HTMLDivElement {
   return node;
 }
 
+function nameOf(workspace: WorkspaceView): string {
+  return workspace.teamName ?? workspace.teamId;
+}
+
+/** A press that asks once more before it acts: the first press says what the second does. */
+function twice(label: string, sure: string, act: (press: HTMLButtonElement) => void) {
+  let armed = false;
+  const press = button(
+    label,
+    () => {
+      if (!armed) {
+        armed = true;
+        press.textContent = sure;
+        return;
+      }
+      act(press);
+    },
+    "danger",
+    true,
+  );
+  return press;
+}
+
+/** A row of the workspaces' table: its name, its bot, its people, its token, and what may be done. */
+function workspaceRow(
+  frame: PluginFrame,
+  words: Words,
+  workspace: WorkspaceView,
+  several: boolean,
+): HTMLTableRowElement {
+  const w = words.connection;
+  const when = dateTimeIn(frame.context.language);
+  // Its name beside the default's badge, its bot's handle under them: one column, which a phone's
+  // width keeps whole.
+  const waiting = workspace.state === "pending";
+  const title = el("span", "workspace-title");
+  title.append(el("span", "", nameOf(workspace)));
+  if (waiting) {
+    title.append(badge(w.waiting, "warning"));
+  } else if (workspace.default && several) {
+    title.append(badge(w.default, "accent"));
+  }
+  const name = el("span", "workspace-name");
+  name.append(title);
+  if (workspace.botHandle !== null) {
+    name.append(el("span", "sc-muted small", `@${workspace.botHandle}`));
+  }
+  const people = el("span", "workspace-people");
+  people.append(
+    el(
+      "span",
+      "",
+      waiting
+        ? DASH
+        : workspace.matchedAt === null
+          ? w.notMatchedYet
+          : w.matchedCount(String(workspace.matched)),
+    ),
+  );
+  if (workspace.problem !== null) {
+    people.append(
+      el("span", "sc-muted small", `${workspace.problem} (${when(workspace.problemAt)})`),
+    );
+  }
+  const said = statusLine();
+  const acts = el("span", "workspace-actions");
+  if (waiting) {
+    const accept = button(
+      w.accept,
+      () => {
+        void runCommand(frame, accept, said, words, "workspace", {
+          team: workspace.teamId,
+          accept: true,
+        });
+      },
+      "primary",
+      true,
+    );
+    acts.append(accept);
+  } else if (several && !workspace.default) {
+    const makeDefault = button(
+      w.makeDefault,
+      () => {
+        void runCommand(frame, makeDefault, said, words, "workspace", {
+          team: workspace.teamId,
+          default: true,
+        });
+      },
+      "ghost",
+      true,
+    );
+    acts.append(makeDefault);
+  }
+  const remove = twice(w.remove, w.removeSure, (press) => {
+    void runCommand(frame, press, said, words, "disconnect", { workspace: workspace.teamId });
+  });
+  acts.append(remove, said);
+  return row([
+    name,
+    people,
+    badge(
+      workspace.token.set ? w.tokenKept : w.secretUnset,
+      workspace.token.set ? "success" : "warning",
+    ),
+    acts,
+  ]);
+}
+
 function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElement[] {
   const w = words.connection;
   const when = dateTimeIn(frame.context.language);
-  const connection = status.connection;
-  const connected = connection?.phase === "connected";
+  const app = status.app;
+  // The table lists the waiting workspaces too; everything else is about the connected ones.
+  const listed = status.workspaces;
+  const workspaces = listed.filter((workspace) => workspace.state === "connected");
+  const installed = workspaces.length > 0;
+  const several = workspaces.length > 1;
+  const waitingAny = listed.some((workspace) => workspace.state === "pending");
   const main: HTMLElement[] = [];
   const aside: HTMLElement[] = [];
 
   // What is left to set up, the line `status` says to an agent too.
   main.push(callout(status.next === "ready" ? w.ready : w.next, status.text));
 
-  if (connection?.problem !== null && connection?.problem !== undefined) {
-    main.push(
-      callout(w.problem, `${connection.problem} (${when(connection.problemAt)})`, "warning"),
-    );
+  if (app?.problem !== null && app?.problem !== undefined) {
+    main.push(callout(w.problem, `${app.problem} (${when(app.problemAt)})`, "warning"));
   }
   if (status.failures > 0) {
     main.push(callout(w.failures(String(status.failures)), undefined, "warning"));
@@ -124,21 +241,20 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
   );
 
   // 3. The app, made from the manifest: its language, its names and its icon.
-  const made = connection !== null && connection.appId !== null;
-  const initial =
-    connection?.language ?? status.workspaceLanguage ?? languageOf(frame.context.language);
+  const made = app !== null && app.appId !== null;
+  const initial = app?.language ?? status.workspaceLanguage ?? languageOf(frame.context.language);
   const appName = input("text", {
-    value: connection?.appName ?? "",
+    value: app?.appName ?? "",
     placeholder: status.defaultNames[initial].app,
     maxLength: 35,
   });
   const botName = input("text", {
-    value: connection?.botName ?? "",
+    value: app?.botName ?? "",
     placeholder: status.defaultNames[initial].bot,
     maxLength: 80,
   });
   const icon = input("url", {
-    value: connection?.iconUrl ?? "",
+    value: app?.iconUrl ?? "",
     placeholder: "https://",
     maxLength: 1000,
   });
@@ -187,47 +303,43 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
     w.app,
     words,
     muted(
-      made && connection?.appId !== null && connection?.appId !== undefined
-        ? w.appMade(connection.appId)
-        : w.appMissing,
+      made && app?.appId !== null && app?.appId !== undefined ? w.appMade(app.appId) : w.appMissing,
     ),
     appBody,
   );
 
-  // 4. The installation in the workspace, through Slack's own page.
-  const installBody: HTMLElement[] = [];
-  if (connected) {
-    installBody.push(muted(w.installed(connection?.teamName ?? connection?.teamId ?? DASH)));
-    if (connection?.connectedBy !== null && connection?.connectedBy !== undefined) {
-      installBody.push(
-        muted(
-          w.installedBy(
-            connection.connectedBy.name ?? connection.connectedBy.login,
-            when(connection.connectedAt),
-          ),
-        ),
-      );
-    }
+  // 4. The installation in a workspace, through Slack's own page; once in one, the way to another.
+  const installBody: HTMLElement[] = [
+    muted(installed ? w.installedIn(workspaces.map(nameOf).join(", ")) : w.notInstalled),
+  ];
+  const installStatus = statusLine();
+  if (status.authorizeUrl !== null) {
+    const url = status.authorizeUrl;
+    // Opened from the press itself, before anything waits, as a frame's links must be.
+    installBody.push(
+      toolbar(
+        button(installed ? w.installAnother : w.installOpen, () => frame.open(url), "primary"),
+      ),
+      muted(w.installLink(when(status.installUntil))),
+      el("p", "mono install-link", url),
+    );
   } else {
-    installBody.push(muted(w.notInstalled));
-    const installStatus = statusLine();
-    if (status.authorizeUrl !== null) {
-      const url = status.authorizeUrl;
-      // Opened from the press itself, before anything waits, as a frame's links must be.
-      installBody.push(toolbar(button(w.installOpen, () => frame.open(url), "primary")));
-    } else {
-      const prepare = button(w.installPrepare, () => {
-        void runCommand(frame, prepare, installStatus, words, "connect", {
-          language: language.value(),
-        });
-      });
-      prepare.disabled = !made || !addressOk || !token.set;
-      installBody.push(toolbar(prepare));
-    }
-    installBody.push(muted(w.installHint), installStatus);
+    const prepare = button(installed ? w.installAnother : w.installPrepare, () => {
+      void runCommand(frame, prepare, installStatus, words, "install", {});
+    });
+    prepare.disabled = !made || !addressOk;
+    installBody.push(toolbar(prepare));
+  }
+  installBody.push(muted(w.installHint), installStatus);
+  if (installed && status.distributionUrl !== null) {
+    const distribution = status.distributionUrl;
+    installBody.push(
+      muted(w.distribution),
+      toolbar(button(w.openDistribution, () => frame.open(distribution), "secondary", true)),
+    );
   }
   const installStep = step(
-    connected ? "done" : made ? "todo" : "blocked",
+    installed ? "done" : made ? "todo" : "blocked",
     w.install,
     words,
     ...installBody,
@@ -236,6 +348,23 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
   const steps = el("ol", "steps");
   steps.append(addressStep, tokenStep, appStep, installStep);
   main.push(panel(w.steps, steps));
+
+  // The workspaces the app is installed in, the default first, then those waiting to be accepted.
+  if (made) {
+    main.push(
+      panel(
+        w.workspaces,
+        listed.length > 0
+          ? table(
+              [w.workspace, w.people, w.botToken, ""],
+              listed.map((workspace) => workspaceRow(frame, words, workspace, several)),
+            )
+          : empty(w.noWorkspace),
+        ...(waitingAny ? [muted(w.acceptHint)] : []),
+        ...(several ? [muted(w.defaultHint)] : []),
+      ),
+    );
+  }
 
   // What HR is to the messenger, first in the aside: it holds whatever the connection's stage.
   const hr = status.hr;
@@ -262,9 +391,9 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
     ),
   );
 
-  // How the connection stands, and the secrets as the console says them.
-  if (connection !== null && connection.appId !== null) {
-    const secrets = SECRETS.map((name): [string, Node] => {
+  // How the app stands, and the secrets as the console says them.
+  if (app !== null && app.appId !== null) {
+    const secrets = FIXED_SECRETS.map((name): [string, Node] => {
       const secret = status.secrets[name];
       const stood = !secret.set
         ? w.secretUnset
@@ -279,28 +408,25 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
       return [w.secretNames[name], value];
     });
     const iconState =
-      connection.iconUrl === null
+      app.iconUrl === null
         ? w.iconState.none
-        : connection.iconSet
+        : app.iconSet
           ? w.iconState.set
-          : connection.iconProblem === "manual"
+          : app.iconProblem === "manual"
             ? w.iconState.manual
-            : connection.iconProblem === null
+            : app.iconProblem === null
               ? w.iconState.waiting
               : w.iconState.refused;
-    const appPage = `https://api.slack.com/apps/${connection.appId}/general`;
+    const appPage = `https://api.slack.com/apps/${app.appId}/general`;
     aside.push(
       panel(
         w.details,
         factsPlain([
-          [w.workspace, connection.teamName ?? DASH],
-          [w.bot, connection.botUserId ?? DASH],
-          [w.handle, connection.botHandle === null ? DASH : `@${connection.botHandle}`],
           [w.icon, iconState],
-          [w.shortcut, connection.shortcut ? w.shortcutOn : w.shortcutOff],
-          [w.renewed, when(connection.rotatedAt)],
+          [w.shortcut, app.shortcut ? w.shortcutOn : w.shortcutOff],
+          [w.renewed, when(app.rotatedAt)],
         ]),
-        ...(connection.iconProblem === "manual" && !connection.iconSet
+        ...(app.iconProblem === "manual" && !app.iconSet
           ? [
               muted(w.iconManual),
               // Opened from the press itself, before anything waits, as a frame's links must be.
@@ -314,24 +440,25 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
   }
 
   // A test message where the app is installed, and the way out wherever one is made: to start
-  // again, in this workspace or another.
-  if (connection !== null && connection.appId !== null) {
+  // again with a new app.
+  if (app !== null && app.appId !== null) {
     const tryParts: HTMLElement[] = [];
-    if (connected) {
+    if (installed) {
+      const where = select(
+        workspaces.map((workspace) => ({ value: workspace.teamId, label: nameOf(workspace) })),
+        workspaces[0]?.teamId,
+      );
       const channel = input("text", { placeholder: "C0123ABCD", maxLength: 40 });
       const testStatus = statusLine();
       const send = button(w.test, () => {
         const value = channel.value.trim();
-        void runCommand(
-          frame,
-          send,
-          testStatus,
-          words,
-          "test",
-          value.length > 0 ? { channel: value } : {},
-        );
+        void runCommand(frame, send, testStatus, words, "test", {
+          ...(several ? { workspace: where.value } : {}),
+          ...(value.length > 0 ? { channel: value } : {}),
+        });
       });
       tryParts.push(
+        ...(several ? [field(w.workspace, where)] : []),
         field(w.testChannel, channel, w.testChannelHint),
         toolbar(send),
         testStatus,
@@ -339,22 +466,12 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
       );
     }
     const outStatus = statusLine();
-    let armed = false;
-    const out = button(
-      w.disconnect,
-      () => {
-        if (!armed) {
-          armed = true;
-          out.textContent = w.disconnectSure;
-          return;
-        }
-        void runCommand(frame, out, outStatus, words, "disconnect");
-      },
-      "danger",
-    );
+    const out = twice(w.disconnect, w.disconnectSure, (press) => {
+      void runCommand(frame, press, outStatus, words, "disconnect", {});
+    });
     aside.push(
       panel(
-        connected ? w.tryIt : w.disconnect,
+        installed ? w.tryIt : w.disconnect,
         ...tryParts,
         muted(w.disconnectHint),
         toolbar(out),

@@ -5,7 +5,10 @@
 // the board, closes its step and is said in the thread; an approval goes to the channels the
 // routes name; a cancellation strikes the request through, where it was said, under the same name.
 // A decision's address is never written where someone it does not reach reads it: the buttons
-// answer, and the link is to each reader's own decisions on the console.
+// answer, and the link is to each reader's own decisions on the console. A thread is told in one
+// workspace (ADR-0014): the one the request was made in, else the first the person has an account
+// in, the default first; a decider who has no account there is asked directly in a workspace they
+// have one in; a channel is told only of someone who has an account in its workspace.
 import {
   type HookHandler,
   type OtherPlugin,
@@ -24,7 +27,7 @@ import {
   threads,
 } from "../../collections.js";
 import { languageOfPerson } from "../../people.js";
-import { SlackError, slack, textOf } from "../../slack/api.js";
+import { bot, isTokenGone, SlackError, slack, textOf } from "../../slack/api.js";
 import {
   type Block,
   clean,
@@ -39,12 +42,14 @@ import {
   strike,
 } from "../../slack/blocks.js";
 import {
+  accountIn,
   alreadyDone,
+  appOf,
   type ConnectionRecord,
-  connectionOf,
+  connectionsOf,
   deliver,
-  isConnected,
   type LinkRecord,
+  type Links,
   linksOf,
 } from "../../store.js";
 import { serverWords } from "../../words.js";
@@ -86,10 +91,12 @@ type ThreadRecord = PluginRecord<ThreadData>;
 /** What one event's telling reads once: the request, its kinds' names, the links of its people. */
 interface Telling {
   readonly ctx: PluginContext;
-  readonly connection: ConnectionRecord;
+  /** The workspaces the app is installed in, the default first. */
+  readonly connected: readonly ConnectionRecord[];
   readonly view: RequestView;
   readonly kinds: readonly LeaveKind[];
-  readonly links: ReadonlyMap<string, LinkRecord>;
+  /** The accounts of the request's people, by person and then by workspace. */
+  readonly links: Links;
   readonly consoleUrl: string | null;
   readonly fallbackLanguage: Language;
 }
@@ -108,9 +115,47 @@ function spanText(telling: Telling, language: string): string {
   return spanOf(request.from, request.to, request.part, language);
 }
 
-/** The person whose leave it is, as Slack shows them where their account is matched. */
-function ownerLink(telling: Telling): LinkRecord | undefined {
-  return telling.links.get(telling.view.person.id);
+/** The person whose leave it is, as Slack shows them in a workspace where they have an account. */
+function ownerLink(telling: Telling, teamId: string | null): LinkRecord | undefined {
+  return accountIn(telling.links, telling.view.person.id, teamId);
+}
+
+/**
+ * A person's account where they are told directly: in the workspace given, else in the first they
+ * have one in, the default first.
+ */
+function homeAccount(
+  telling: Telling,
+  personId: string,
+  teamId: string | null,
+): LinkRecord | undefined {
+  return (
+    accountIn(telling.links, personId, teamId) ??
+    telling.connected
+      .map((connection) => accountIn(telling.links, personId, connection.data.teamId))
+      .find((account) => account !== undefined)
+  );
+}
+
+/**
+ * The workspace a request's thread is told in: the one it was made in where the person has an
+ * account there, else the first they have one in, the default first; else the first any of its
+ * deciders has one in; none where nobody is in Slack.
+ */
+function threadTeam(telling: Telling, madeIn: string | null): string | null {
+  const teams = telling.connected.map((connection) => connection.data.teamId);
+  const order = madeIn !== null && teams.includes(madeIn) ? [madeIn, ...teams] : teams;
+  const view = telling.view;
+  const own = order.find((teamId) => ownerLink(telling, teamId) !== undefined);
+  if (own !== undefined) {
+    return own;
+  }
+  const deciders = [...view.asked, ...view.line.flatMap((step) => step.deciders)];
+  return (
+    order.find((teamId) =>
+      deciders.some((person) => accountIn(telling.links, person.id, teamId) !== undefined),
+    ) ?? null
+  );
 }
 
 /** A message in someone's name and picture, under the app's mark (ADR-0009). */
@@ -163,20 +208,31 @@ function requestBlocks(
   return { blocks, text };
 }
 
+/**
+ * A request's thread. Where the submission kept its workspace while the hook began a thread at the
+ * same time, the one that holds a conversation or steps is the thread, the other an empty note.
+ */
 async function threadOf(ctx: PluginContext, requestId: string): Promise<ThreadRecord | null> {
   const page = await ctx.records(threads).list({ where: { thing: requestId }, limit: 5 });
-  return page.items.find((record) => record.data.plugin === HR) ?? null;
+  const own = page.items.filter((record) => record.data.plugin === HR);
+  return (
+    own.find((record) => record.data.channelId !== null || record.data.steps.length > 0) ??
+    own[0] ??
+    null
+  );
 }
 
 async function post(
   ctx: PluginContext,
+  teamId: string,
   params: Readonly<Record<string, unknown>>,
 ): Promise<string> {
-  const answer = await slack(ctx, "chat.postMessage", {
-    unfurl_links: false,
-    unfurl_media: false,
-    ...params,
-  });
+  const answer = await slack(
+    ctx,
+    "chat.postMessage",
+    { unfurl_links: false, unfurl_media: false, ...params },
+    bot(teamId),
+  );
   const ts = textOf(answer, "ts");
   if (ts === null) {
     throw new SlackError("no_ts", "chat.postMessage");
@@ -184,18 +240,32 @@ async function post(
   return ts;
 }
 
+/**
+ * Changes a message written before, in its workspace while the app is still installed there: a
+ * workspace taken away since keeps what was written, and the rest of the telling goes on.
+ */
 async function update(
-  ctx: PluginContext,
+  telling: Telling,
+  teamId: string | null,
   channel: string,
   ts: string,
   text: string,
   blocks: readonly Block[],
 ): Promise<void> {
+  if (
+    teamId === null ||
+    !telling.connected.some((connection) => connection.data.teamId === teamId)
+  ) {
+    return;
+  }
   try {
-    await slack(ctx, "chat.update", { channel, ts, text, blocks });
+    await slack(telling.ctx, "chat.update", { channel, ts, text, blocks }, bot(teamId));
   } catch (error) {
-    // A message someone deleted is not there to change; the rest of the telling goes on.
-    if (!(error instanceof SlackError && error.code === "message_not_found")) {
+    // A message someone deleted is not there to change, nor one of a workspace whose token is gone.
+    if (
+      !(error instanceof SlackError && error.code === "message_not_found") &&
+      !isTokenGone(error)
+    ) {
       throw error;
     }
   }
@@ -212,11 +282,12 @@ async function ensureThread(telling: Telling): Promise<ThreadRecord> {
     return found;
   }
   const language = await languageOfPerson(ctx, view.person.id, telling.fallbackLanguage);
-  const owner = ownerLink(telling);
+  const teamId = threadTeam(telling, found?.data.teamId ?? null);
+  const owner = ownerLink(telling, teamId);
   const ordered = [view.person, ...view.asked, ...view.line.flatMap((step) => step.deciders)];
   const members: string[] = [];
   for (const person of ordered) {
-    const account = telling.links.get(person.id);
+    const account = accountIn(telling.links, person.id, teamId);
     if (
       account !== undefined &&
       !members.includes(account.data.memberId) &&
@@ -229,6 +300,7 @@ async function ensureThread(telling: Telling): Promise<ThreadRecord> {
     plugin: HR,
     thing: view.id,
     personId: view.person.id,
+    teamId: null,
     channelId: null,
     members,
     rootTs: null,
@@ -238,24 +310,24 @@ async function ensureThread(telling: Telling): Promise<ThreadRecord> {
     posts: found?.data.posts ?? [],
     state: "open",
   };
-  if (members.length === 0) {
+  if (members.length === 0 || teamId === null) {
     return found === null
       ? ctx.records(threads).create(base)
       : ctx.records(threads).update(found.id, base);
   }
-  const opened = await slack(ctx, "conversations.open", { users: members.join(",") });
+  const opened = await slack(ctx, "conversations.open", { users: members.join(",") }, bot(teamId));
   const channelId = textOf(opened, "channel.id");
   if (channelId === null) {
     throw new SlackError("channel_not_found", "conversations.open");
   }
   const message = requestBlocks(telling, language, owner !== undefined, false);
-  const rootTs = await post(ctx, {
+  const rootTs = await post(ctx, teamId, {
     channel: channelId,
     text: message.text,
     blocks: message.blocks,
     ...inNameOf(owner?.data),
   });
-  const data: ThreadData = { ...base, channelId, rootTs };
+  const data: ThreadData = { ...base, teamId, channelId, rootTs };
   return found === null
     ? ctx.records(threads).create(data)
     : ctx.records(threads).update(found.id, data);
@@ -287,17 +359,20 @@ async function askStep(
       ? thread.data.language
       : await languageOfPerson(ctx, first.id, thread.data.language);
   const words = serverWords(language);
-  const inSlack = asked.filter((person) => telling.links.has(person.id));
-  const outside = asked.filter((person) => !telling.links.has(person.id));
+  const teamId = thread.data.teamId;
+  const inSlack = asked.filter((person) => homeAccount(telling, person.id, teamId) !== undefined);
+  const outside = asked.filter((person) => !inSlack.includes(person));
   const inConversation = inSlack.filter((person) => {
-    const account = telling.links.get(person.id);
+    const account = accountIn(telling.links, person.id, teamId);
     return account !== undefined && thread.data.members.includes(account.data.memberId);
   });
   const direct = inSlack.filter((person) => !inConversation.includes(person)).slice(0, DMS_AT_MOST);
   const who =
     inConversation.length > 0
       ? inConversation
-          .map((person) => mention(telling.links.get(person.id)?.data.memberId ?? ""))
+          .map((person) =>
+            mention(accountIn(telling.links, person.id, teamId)?.data.memberId ?? ""),
+          )
           .join(" ")
       : asked.map((person) => safe(clean(nameOf(person), 200))).join(", ");
   const ask =
@@ -322,8 +397,8 @@ async function askStep(
   });
   const blocks: Block[] = [section(ask), buttons, context(...notes)];
   let ts: string | null = null;
-  if (thread.data.channelId !== null && thread.data.rootTs !== null) {
-    ts = await post(ctx, {
+  if (teamId !== null && thread.data.channelId !== null && thread.data.rootTs !== null) {
+    ts = await post(ctx, teamId, {
       channel: thread.data.channelId,
       thread_ts: thread.data.rootTs,
       text: fallback(ask),
@@ -332,10 +407,12 @@ async function askStep(
   }
   const dms: StepData["dms"] = [];
   for (const person of direct) {
-    const account = telling.links.get(person.id);
+    // In the thread's workspace where they have an account there, else in one they have.
+    const account = homeAccount(telling, person.id, teamId);
     if (account === undefined) {
       continue;
     }
+    const dmTeam = account.data.teamId;
     const personal = await languageOfPerson(ctx, person.id, language);
     const own = serverWords(personal);
     const about = own.thread.about(
@@ -343,7 +420,12 @@ async function askStep(
       safe(`${kindNameOf(telling, personal)}, ${spanText(telling, personal)}`),
     );
     const reason = paragraph(view.request.reason, 2000);
-    const opened = await slack(ctx, "conversations.open", { users: account.data.memberId });
+    const opened = await slack(
+      ctx,
+      "conversations.open",
+      { users: account.data.memberId },
+      bot(dmTeam),
+    );
     const channel = textOf(opened, "channel.id");
     if (channel === null) {
       continue;
@@ -355,7 +437,7 @@ async function askStep(
         ? own.thread.askCancel(mention(account.data.memberId))
         : own.thread.ask(mention(account.data.memberId)),
     ];
-    const dmTs = await post(ctx, {
+    const dmTs = await post(ctx, dmTeam, {
       channel,
       text: fallback(about),
       blocks: [
@@ -364,7 +446,7 @@ async function askStep(
         context(own.thread.onConsole(decisionsLink(telling, personal))),
       ],
     });
-    dms.push({ channelId: channel, ts: dmTs });
+    dms.push({ teamId: dmTeam, channelId: channel, ts: dmTs });
   }
   const step: StepData = {
     decisionId,
@@ -392,10 +474,12 @@ async function closeSteps(
   for (const step of open) {
     const said = line(thread.data.language);
     if (step.ts !== null && thread.data.channelId !== null) {
-      await update(ctx, thread.data.channelId, step.ts, fallback(said), [section(safe(said))]);
+      await update(telling, thread.data.teamId, thread.data.channelId, step.ts, fallback(said), [
+        section(safe(said)),
+      ]);
     }
     for (const dm of step.dms) {
-      await update(ctx, dm.channelId, dm.ts, fallback(said), [section(safe(said))]);
+      await update(telling, dm.teamId, dm.channelId, dm.ts, fallback(said), [section(safe(said))]);
     }
   }
   const closed = thread.data.steps.map((step) =>
@@ -413,7 +497,8 @@ async function sayInThread(
   text: string,
   note: string | null = null,
 ): Promise<void> {
-  if (thread.data.channelId === null || thread.data.rootTs === null) {
+  const teamId = thread.data.teamId;
+  if (teamId === null || thread.data.channelId === null || thread.data.rootTs === null) {
     return;
   }
   const words = serverWords(thread.data.language);
@@ -421,7 +506,7 @@ async function sayInThread(
   if (note !== null && note.trim().length > 0) {
     blocks.push(section(`*${words.thread.note}*: ${safe(paragraph(note, 2000))}`));
   }
-  await post(telling.ctx, {
+  await post(telling.ctx, teamId, {
     channel: thread.data.channelId,
     thread_ts: thread.data.rootTs,
     text: fallback(text),
@@ -466,24 +551,31 @@ function channelLine(
   return { text: fallback(said), blocks };
 }
 
-/** Tells the channels the routes name of an approved leave, each once. */
+/**
+ * Tells the channels the routes name of an approved leave, each once: a channel of a workspace the
+ * app is installed in, of someone who has an account in that workspace.
+ */
 async function tellChannels(
   telling: Telling,
   thread: ThreadRecord,
 ): Promise<{ thread: ThreadRecord; failed: string[] }> {
   const { ctx } = telling;
   const page = await ctx.records(routes).list({ where: { kind: "hr:leave-approved" }, limit: 50 });
-  const owner = ownerLink(telling);
+  const teams = new Set(telling.connected.map((connection) => connection.data.teamId));
   const posts = [...thread.data.posts];
   const failed: string[] = [];
   for (const route of page.items) {
     if (posts.some((kept) => kept.routeId === route.id) || posts.length >= 20) {
       continue;
     }
+    const owner = ownerLink(telling, route.data.teamId);
+    if (!teams.has(route.data.teamId) || owner === undefined) {
+      continue;
+    }
     const as = route.data.as === "person" && owner !== undefined ? "person" : "app";
     const line = channelLine(telling, { as, language: route.data.language }, false);
     try {
-      const ts = await post(ctx, {
+      const ts = await post(ctx, route.data.teamId, {
         channel: route.data.channelId,
         text: line.text,
         blocks: line.blocks,
@@ -491,6 +583,7 @@ async function tellChannels(
       });
       posts.push({
         routeId: route.id,
+        teamId: route.data.teamId,
         channelId: route.data.channelId,
         ts,
         as,
@@ -519,10 +612,11 @@ async function bareThread(telling: Telling): Promise<ThreadRecord> {
     plugin: HR,
     thing: telling.view.id,
     personId: telling.view.person.id,
+    teamId: null,
     channelId: null,
     members: [],
     rootTs: null,
-    rootAs: ownerLink(telling) === undefined ? "app" : "person",
+    rootAs: "app",
     language: await languageOfPerson(telling.ctx, telling.view.person.id, telling.fallbackLanguage),
     steps: [],
     posts: [],
@@ -617,12 +711,19 @@ async function tell(telling: Telling, event: LeaveEvent): Promise<string> {
           closed.data.rootAs === "person",
           true,
         );
-        await update(ctx, closed.data.channelId, closed.data.rootTs, message.text, message.blocks);
+        await update(
+          telling,
+          closed.data.teamId,
+          closed.data.channelId,
+          closed.data.rootTs,
+          message.text,
+          message.blocks,
+        );
         await sayInThread(telling, closed, serverWords(closed.data.language).thread.cancelled);
       }
       for (const kept of closed.data.posts) {
         const line = channelLine(telling, kept, true);
-        await update(ctx, kept.channelId, kept.ts, line.text, line.blocks);
+        await update(telling, kept.teamId, kept.channelId, kept.ts, line.text, line.blocks);
       }
       await ctx.records(threads).update(closed.id, { state: "cancelled" });
       return `cancelled:${closed.data.posts.length + (closed.data.rootTs === null ? 0 : 1)}`;
@@ -676,8 +777,8 @@ export async function onLeaveEvent(ctx: PluginContext, event: PluginHookEvent): 
     await deliver(ctx, event, "skipped", "not_leave", null);
     return;
   }
-  const connection = await connectionOf(ctx);
-  if (!isConnected(connection)) {
+  const connected = await connectionsOf(ctx);
+  if (connected.length === 0) {
     await deliver(ctx, event, "skipped", "not_connected", requestId);
     return;
   }
@@ -712,7 +813,7 @@ export async function onLeaveEvent(ctx: PluginContext, event: PluginHookEvent): 
     const workspace = await ctx.console.workspace();
     const telling: Telling = {
       ctx,
-      connection,
+      connected,
       view,
       kinds,
       links: await linksOf(
@@ -722,7 +823,7 @@ export async function onLeaveEvent(ctx: PluginContext, event: PluginHookEvent): 
       consoleUrl: workspace.url,
       fallbackLanguage: workspace.languageSet
         ? languageOf(workspace.language)
-        : connection.data.language,
+        : ((await appOf(ctx))?.data.language ?? "en"),
     };
     const said = await tell(telling, leaveEvent);
     await deliver(ctx, event, "sent", said, requestId);

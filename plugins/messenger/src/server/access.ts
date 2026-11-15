@@ -1,11 +1,14 @@
-// Who may do what: the one role, `messenger`, keeps the connection, the routes and the matching;
-// an administrator holds it as every role. Everyone else meets the plugin in Slack alone, where
-// what they do comes back to the console as theirs, through the console's call for a person.
+// Who may do what: the role `messenger` keeps the connection, the routes and the matching; an
+// administrator holds it as every role. The role `member`, every member's, chooses what they are
+// told of their own work (ADR-0015); otherwise people meet the plugin in Slack, where what they do
+// comes back to the console as theirs, through the console's call for a person.
 import { type PluginContext, PluginError } from "@skillcdn/console/plugin";
 import type { PersonBrief } from "../shared/contracts.js";
 import { serverWords } from "./words.js";
 
 export const ROLE = "messenger";
+/** The role every member holds (`defaultRole`): what they are told of their own work. */
+export const MEMBER = "member";
 
 /** The person a command or a query acts as, or none for the console itself. */
 export function callerPerson(ctx: PluginContext): PersonBrief | null {

@@ -1,11 +1,13 @@
-// The records of the messenger, kept by the console. One connection per messenger; the routes the
-// role holders write; the links of people to their accounts, written by the matching; a thread
-// per thing told, what was written about it and where; and the deliveries, a line per event
-// heard, forgotten after a month. Every schema bounds what it holds, since what Slack and other
-// plugins answer is data from elsewhere.
+// The records of the messenger, kept by the console. One app, made from the plugin's manifest and
+// installed in each workspace that takes it (ADR-0014); a connection per workspace it is installed
+// in, the default one for every project no other names; the routes the role holders write, each
+// to a channel of a workspace; the links of people to their accounts, one per workspace, written
+// by the matching; a thread per thing told, what was written about it and where; and the
+// deliveries, a line per event heard, forgotten after a month. Every schema bounds what it holds,
+// since what Slack and other plugins answer is data from elsewhere.
 import { defineCollection, z } from "@skillcdn/console/plugin";
-import { LANGUAGES, ROUTE_AS, ROUTE_KINDS } from "../shared/contracts.js";
-import { ROLE } from "./access.js";
+import { CADENCES, LANGUAGES, NOTICE_KINDS, ROUTE_AS, ROUTE_KINDS } from "../shared/contracts.js";
+import { MEMBER, ROLE } from "./access.js";
 
 const id = z.string().min(1).max(64);
 const instant = z.string().min(1).max(40);
@@ -16,24 +18,31 @@ export const channelId = z.string().regex(/^[CDG][A-Z0-9]{2,40}$/);
 /** A member of a workspace. */
 export const memberId = z.string().regex(/^[UW][A-Z0-9]{2,40}$/);
 /** A workspace, an app or a bot user: Slack's ids, letters and digits. */
-const slackId = z.string().regex(/^[A-Z][A-Z0-9]{2,40}$/);
+export const slackId = z.string().regex(/^[A-Z][A-Z0-9]{2,40}$/);
 
-export const connections = defineCollection("connections", {
+/** The most workspaces one app is installed in: the keys its bot token keeps. */
+export const WORKSPACES_AT_MOST = 50;
+/** The most installation links good at once. */
+export const INSTALLS_AT_MOST = 20;
+
+/** An installation link given out: the state Slack carries back, until when it is good, and who asked. */
+const install = z.object({
+  state: z.string().regex(/^[0-9a-f]{32}$/),
+  until: instant,
+  by: id.nullable(),
+});
+
+export const apps = defineCollection("apps", {
   schema: z.object({
     provider: z.literal("slack"),
-    phase: z.enum(["app", "connected", "disconnected"]),
     appId: slackId.nullable(),
     /** The app's client id: no secret, since Slack puts it in addresses, and so a plain field. */
     clientId: z.string().max(80).nullable(),
-    teamId: slackId.nullable(),
-    teamName: z.string().max(200).nullable(),
-    botUserId: slackId.nullable(),
+    /** The language of the names the app shows in Slack, its shortcut's among them. */
     language: z.enum(LANGUAGES),
     /** The names someone chose for the app and its bot in Slack; null where the language's own stand. */
     appName: z.string().max(100).nullable(),
     botName: z.string().max(80).nullable(),
-    /** The bot's handle as Slack made it from the bot's name, read once the app is installed. */
-    botHandle: z.string().max(80).nullable(),
     /** The icon chosen, a public https image, and the one Slack took last. */
     iconUrl: z.string().max(1000).nullable(),
     iconSetUrl: z.string().max(1000).nullable(),
@@ -42,31 +51,60 @@ export const connections = defineCollection("connections", {
     shortcut: z.boolean(),
     manifestDigest: z.string().max(64).nullable(),
     manifestAt: instant.nullable(),
-    /** The state an authorization carries to Slack and back, and until when it is good. */
-    oauthState: z.string().max(80).nullable(),
-    oauthUntil: instant.nullable(),
-    connectedAt: instant.nullable(),
-    connectedBy: id.nullable(),
+    /** The installation links good now, each once. */
+    installs: z.array(install).max(INSTALLS_AT_MOST),
     problem: z.string().max(500).nullable(),
     problemAt: instant.nullable(),
-    matchedAt: instant.nullable(),
-    matched: z.number().int().min(0),
-    unmatched: z.number().int().min(0),
     rotatedAt: instant.nullable(),
   }),
   indexes: ["provider"],
   read: [ROLE],
 });
 
+export const connections = defineCollection("connections", {
+  schema: z.object({
+    provider: z.literal("slack"),
+    /** The workspace, the key its bot token is kept under. */
+    teamId: slackId,
+    teamName: z.string().max(200).nullable(),
+    botUserId: slackId.nullable(),
+    /** The bot's handle as Slack made it from the bot's name, read once the app is installed. */
+    botHandle: z.string().max(80).nullable(),
+    /**
+     * `pending` once installed through a link, until whoever keeps the messenger accepts it on the
+     * console; `connected`; or `removed` once the workspace took the app away or someone
+     * disconnected it. Nothing is matched, told or answered in a workspace that is not connected.
+     */
+    state: z.enum(["pending", "connected", "removed"]),
+    /** The workspace every project no other names is told in. */
+    default: z.boolean(),
+    /** The projects told in this workspace, by the console's ids. */
+    projects: z.array(id).max(500),
+    connectedAt: instant.nullable(),
+    /** Who gave out the link it was installed through, by the console's id, and who installed it in Slack. */
+    connectedBy: id.nullable(),
+    installedBy: memberId.nullable(),
+    problem: z.string().max(500).nullable(),
+    problemAt: instant.nullable(),
+    matchedAt: instant.nullable(),
+    matched: z.number().int().min(0),
+    unmatched: z.number().int().min(0),
+  }),
+  indexes: ["teamId", "state"],
+  read: [ROLE],
+});
+
 export const routes = defineCollection("routes", {
   schema: z.object({
     kind: z.enum(ROUTE_KINDS),
+    /** The workspace the channel is in. */
+    teamId: slackId,
     channelId,
     channelName: z.string().min(1).max(200),
     language: z.enum(LANGUAGES),
     as: z.enum(ROUTE_AS),
   }),
-  indexes: ["kind", "channelId"],
+  indexes: ["kind", "channelId", "teamId"],
   read: [ROLE],
 });
 
@@ -74,6 +112,7 @@ export const links = defineCollection("links", {
   schema: z.object({
     personId: id,
     memberId,
+    /** The workspace the account is in: a person has one link in each workspace they are in. */
     teamId: slackId,
     /** The name the account goes by in Slack, which a message in the person's name carries. */
     name: z.string().min(1).max(200),
@@ -81,7 +120,7 @@ export const links = defineCollection("links", {
     image: z.string().max(1000).nullable(),
     matchedAt: instant,
   }),
-  indexes: ["personId", "memberId"],
+  indexes: ["personId", "memberId", "teamId"],
   owner: "personId",
   read: [ROLE],
   history: false,
@@ -94,13 +133,14 @@ const step = z.object({
   ts: slackTs.nullable(),
   /** Whom the decision is addressed to, by the console's ids. */
   asked: z.array(id).max(50),
-  /** The direct messages that asked those the conversation does not hold. */
-  dms: z.array(z.object({ channelId, ts: slackTs })).max(10),
+  /** The direct messages that asked those the conversation does not hold, each in its workspace. */
+  dms: z.array(z.object({ teamId: slackId, channelId, ts: slackTs })).max(10),
   closed: z.boolean(),
 });
 
 const post = z.object({
   routeId: id,
+  teamId: slackId,
   channelId,
   ts: slackTs,
   as: z.enum(ROUTE_AS),
@@ -113,6 +153,8 @@ export const threads = defineCollection("threads", {
     plugin: z.string().min(1).max(32),
     thing: id,
     personId: id,
+    /** The workspace of the conversation; null where nobody is in Slack. */
+    teamId: slackId.nullable(),
     /** The conversation of the person and whoever decides; null where nobody is in Slack. */
     channelId: channelId.nullable(),
     members: z.array(memberId).max(8),
@@ -125,7 +167,7 @@ export const threads = defineCollection("threads", {
     posts: z.array(post).max(20),
     state: z.enum(["open", "approved", "rejected", "returned", "cancelled"]),
   }),
-  indexes: ["thing", "state"],
+  indexes: ["thing", "state", "teamId"],
   read: [ROLE],
   history: false,
   retention: { days: 400, by: "updatedAt" },
@@ -138,6 +180,8 @@ export const deliveries = defineCollection("deliveries", {
     thing: id.nullable(),
     outcome: z.enum(["sent", "skipped", "failed"]),
     note: z.string().max(300),
+    /** Whom an event was told to already, as `<person>:<kind>`, so that a retry tells nobody twice. */
+    told: z.array(z.string().max(100)).max(100).optional(),
     attempt: z.number().int().min(1).max(100),
     at: instant,
   }),
@@ -147,8 +191,65 @@ export const deliveries = defineCollection("deliveries", {
   retention: { days: 30 },
 });
 
-export const collections = [connections, routes, links, threads, deliveries];
+/**
+ * What a person chose to be told of their own work (ADR-0015), one record each, theirs: the kinds,
+ * the projects told nothing of, at once or once a day and when, and whether their own agents count.
+ */
+export const preferences = defineCollection("preferences", {
+  schema: z.object({
+    personId: id,
+    kinds: z.object(
+      Object.fromEntries(NOTICE_KINDS.map((kind) => [kind, z.boolean()])) as {
+        [K in (typeof NOTICE_KINDS)[number]]: z.ZodBoolean;
+      },
+    ),
+    mutedProjects: z.array(id).max(200),
+    cadence: z.enum(CADENCES),
+    /** The time of the day's message, in the workspace's zone. */
+    at: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
+    ownAgents: z.boolean(),
+    /** The day the last day's message went, in the workspace's zone. */
+    sentOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+  }),
+  indexes: ["personId", "cadence"],
+  owner: "personId",
+  // A person's own, as what waits for their day's message: nobody else reads it through the console.
+  readOwn: [MEMBER],
+  history: false,
+});
 
+/** A line of a person's message of the day, kept until it is sent; forgotten after a few days. */
+export const waiting = defineCollection("waiting", {
+  schema: z.object({
+    personId: id,
+    kind: z.enum(NOTICE_KINDS),
+    /** The line as it is said, in the person's language, and where it leads on the console. */
+    text: z.string().min(1).max(600),
+    url: z.string().max(1000).nullable(),
+    at: instant,
+  }),
+  indexes: ["personId", "at"],
+  owner: "personId",
+  readOwn: [MEMBER],
+  history: false,
+  retention: { days: 3 },
+});
+
+export const collections = [
+  apps,
+  connections,
+  routes,
+  links,
+  threads,
+  deliveries,
+  preferences,
+  waiting,
+];
+
+export type AppData = z.infer<typeof apps.schema>;
 export type ConnectionData = z.infer<typeof connections.schema>;
 export type RouteData = z.infer<typeof routes.schema>;
 export type LinkData = z.infer<typeof links.schema>;
@@ -156,3 +257,6 @@ export type ThreadData = z.infer<typeof threads.schema>;
 export type StepData = z.infer<typeof step>;
 export type PostData = z.infer<typeof post>;
 export type DeliveryData = z.infer<typeof deliveries.schema>;
+export type InstallData = z.infer<typeof install>;
+export type PreferenceData = z.infer<typeof preferences.schema>;
+export type WaitingData = z.infer<typeof waiting.schema>;

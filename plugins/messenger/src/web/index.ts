@@ -5,7 +5,9 @@
 import { connect, type PluginFrame } from "@skillcdn/console/plugin/web";
 import { renderActivity } from "./pages/activity.js";
 import { renderConnection } from "./pages/connection.js";
+import { renderNotifications } from "./pages/notifications.js";
 import { renderPeople } from "./pages/people.js";
+import { renderProject } from "./pages/project.js";
 import { renderRoutes } from "./pages/routes.js";
 import { errorBlock } from "./ui.js";
 import { type Words, wordsFor } from "./words.js";
@@ -18,6 +20,10 @@ async function render(root: HTMLElement, frame: PluginFrame, words: Words): Prom
       return renderPeople(root, frame, words);
     case "activity":
       return renderActivity(root, frame, words);
+    case "notifications":
+      return renderNotifications(root, frame, words);
+    case "slack":
+      return renderProject(root, frame, words);
     default:
       return renderConnection(root, frame, words);
   }

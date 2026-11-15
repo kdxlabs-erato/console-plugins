@@ -6,7 +6,9 @@
 // the person closes the pushed one and Slack says so (`view_closed`). Nothing anyone else reads is
 // written here: HR's events bring the thread and the channels' strike-through to the hooks.
 import { type PluginContext, PluginError, satisfiesRange } from "@skillcdn/console/plugin";
-import { SlackError, slack } from "../../slack/api.js";
+import { languageOf } from "../../../shared/contracts.js";
+import { threads } from "../../collections.js";
+import { bot, SlackError, slack } from "../../slack/api.js";
 import type {
   ActionsPayload,
   ClosedPayload,
@@ -18,6 +20,7 @@ import { serverWords } from "../../words.js";
 import {
   balanceReport,
   cancelOutcome,
+  HR,
   HR_VERSIONS,
   hrOf,
   isAbsent,
@@ -49,6 +52,8 @@ import { todayIn } from "./texts.js";
 export interface Presser {
   readonly personId: string;
   readonly language: string;
+  /** The workspace they pressed in, which every call about their press is made in. */
+  readonly teamId: string;
 }
 
 type FormRead =
@@ -116,11 +121,13 @@ async function readForm(ctx: PluginContext, presser: Presser): Promise<FormRead>
 /** Opens the form for whoever pressed, or a notice where they or HR cannot take a request. */
 export async function openLeaveForm(
   ctx: PluginContext,
+  teamId: string,
   payload: ShortcutPayload,
   presser: Presser | null,
   language: string,
 ): Promise<void> {
-  const open = (view: View) => slack(ctx, "views.open", { trigger_id: payload.trigger_id, view });
+  const open = (view: View) =>
+    slack(ctx, "views.open", { trigger_id: payload.trigger_id, view }, bot(teamId));
   if (presser === null) {
     const words = serverWords(language).form;
     await open(noticeView(language, words.notLinkedTitle, words.notLinked));
@@ -159,11 +166,16 @@ export async function onFormPress(
   }
   const read = await readForm(ctx, presser);
   try {
-    await slack(ctx, "views.update", {
-      view_id: view.id,
-      ...(view.hash === undefined ? {} : { hash: view.hash }),
-      view: read.ok ? leaveFormView(read.data, chosen) : read.view,
-    });
+    await slack(
+      ctx,
+      "views.update",
+      {
+        view_id: view.id,
+        ...(view.hash === undefined ? {} : { hash: view.hash }),
+        view: read.ok ? leaveFormView(read.data, chosen) : read.view,
+      },
+      bot(presser.teamId),
+    );
   } catch (error) {
     if (error instanceof SlackError && STALE.has(error.code)) {
       return;
@@ -196,7 +208,8 @@ async function openCancel(
     return;
   }
   const words = serverWords(presser.language);
-  const push = (view: View) => slack(ctx, "views.push", { trigger_id: trigger, view });
+  const push = (view: View) =>
+    slack(ctx, "views.push", { trigger_id: trigger, view }, bot(presser.teamId));
   const hr = await hrOf(ctx);
   const forPerson = hr?.for(presser.personId);
   const read = forPerson?.api["request-view"];
@@ -328,10 +341,12 @@ async function drawAgain(
   try {
     const read = await readForm(ctx, presser);
     if (read.ok) {
-      await slack(ctx, "views.update", {
-        view_id: viewId,
-        view: leaveFormView(read.data, kind ?? firstKind(read.data.kinds)),
-      });
+      await slack(
+        ctx,
+        "views.update",
+        { view_id: viewId, view: leaveFormView(read.data, kind ?? firstKind(read.data.kinds)) },
+        bot(presser.teamId),
+      );
     }
   } catch (error) {
     ctx.log.warn("the leave form was not drawn again after a cancellation", {
@@ -369,7 +384,8 @@ export async function submitLeave(
     return { response_action: "errors", errors: { from: words.unavailable } };
   }
   try {
-    requestOutcome.parse(await request(read.input));
+    const outcome = requestOutcome.parse(await request(read.input));
+    await rememberWorkspace(ctx, outcome.request.id, presser);
     return { response_action: "clear" };
   } catch (error) {
     if (error instanceof PluginError || isOwnRefusal(error)) {
@@ -386,6 +402,40 @@ export async function submitLeave(
       response_action: "errors",
       errors: { from: isAbsent(error) ? words.unavailable : words.failed },
     };
+  }
+}
+
+/**
+ * Keeps the workspace a request was made in, so that its thread is begun there (ADR-0014): a
+ * thread with no conversation yet, which the hook on HR's event takes up. What fails here is let
+ * be, the hook choosing a workspace itself; the request went through either way.
+ */
+async function rememberWorkspace(
+  ctx: PluginContext,
+  requestId: string,
+  presser: Presser,
+): Promise<void> {
+  try {
+    const found = await ctx.records(threads).list({ where: { thing: requestId }, limit: 1 });
+    if (found.items.length > 0) {
+      return;
+    }
+    await ctx.records(threads).create({
+      plugin: HR,
+      thing: requestId,
+      personId: presser.personId,
+      teamId: presser.teamId,
+      channelId: null,
+      members: [],
+      rootTs: null,
+      rootAs: "app",
+      language: languageOf(presser.language),
+      steps: [],
+      posts: [],
+      state: "open",
+    });
+  } catch (error) {
+    ctx.log.warn("the workspace of a request was not kept", { code: refusalCode(error) });
   }
 }
 

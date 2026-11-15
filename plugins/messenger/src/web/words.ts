@@ -3,13 +3,15 @@
 // elsewhere.
 import type {
   AddressState,
+  Cadence,
+  FixedSecretName,
   HrState,
   MatchState,
   NoteCode,
+  NoticeKind,
   Outcome,
   RouteAs,
   RouteKind,
-  SecretName,
 } from "../shared/contracts.js";
 
 export interface Words {
@@ -51,12 +53,30 @@ export interface Words {
     readonly make: string;
     readonly update: string;
     readonly install: string;
-    readonly installed: (team: string) => string;
+    readonly installedIn: (names: string) => string;
     readonly notInstalled: string;
     readonly installOpen: string;
+    readonly installAnother: string;
     readonly installPrepare: string;
+    readonly installLink: (until: string) => string;
     readonly installHint: string;
-    readonly installedBy: (who: string, when: string) => string;
+    readonly distribution: string;
+    readonly openDistribution: string;
+    readonly workspaces: string;
+    readonly noWorkspace: string;
+    readonly people: string;
+    readonly botToken: string;
+    readonly tokenKept: string;
+    readonly default: string;
+    readonly defaultHint: string;
+    readonly makeDefault: string;
+    readonly matchedCount: (count: string) => string;
+    readonly notMatchedYet: string;
+    readonly remove: string;
+    readonly removeSure: string;
+    readonly waiting: string;
+    readonly accept: string;
+    readonly acceptHint: string;
     readonly done: string;
     readonly todo: string;
     readonly blocked: string;
@@ -69,7 +89,7 @@ export interface Words {
     readonly shortcutOff: string;
     readonly renewed: string;
     readonly secrets: string;
-    readonly secretNames: Readonly<Record<SecretName, string>>;
+    readonly secretNames: Readonly<Record<FixedSecretName, string>>;
     readonly secretFrom: (source: string) => string;
     readonly secretPasted: string;
     readonly secretUnset: string;
@@ -99,6 +119,8 @@ export interface Words {
     readonly none: string;
     readonly kind: string;
     readonly channel: string;
+    readonly workspace: string;
+    readonly workspaceGone: string;
     readonly language: string;
     readonly as: string;
     readonly kinds: Readonly<Record<RouteKind, string>>;
@@ -128,8 +150,54 @@ export interface Words {
     readonly person: string;
     readonly state: string;
     readonly account: string;
+    readonly accountIn: (name: string, workspace: string) => string;
     readonly nobody: string;
     readonly more: (shown: string, total: string) => string;
+  };
+  readonly notifications: {
+    readonly title: string;
+    readonly lead: string;
+    readonly noAccount: string;
+    readonly choose: string;
+    readonly what: string;
+    readonly whatHint: string;
+    readonly kinds: Readonly<Record<NoticeKind, string>>;
+    readonly when: string;
+    readonly cadences: Readonly<Record<Cadence, string>>;
+    readonly at: string;
+    readonly atHint: (zone: string) => string;
+    readonly agents: string;
+    readonly ownAgents: string;
+    readonly save: string;
+    readonly where: string;
+    readonly workspace: string;
+    readonly nowhere: string;
+    readonly whereHint: string;
+    readonly waiting: (count: string) => string;
+    readonly muted: string;
+    readonly unmute: string;
+    readonly defaults: string;
+    readonly defaultsHint: string;
+    readonly reset: string;
+  };
+  readonly project: {
+    readonly title: string;
+    readonly lead: string;
+    readonly notConnected: string;
+    readonly here: string;
+    readonly workspace: string;
+    readonly byDefault: string;
+    readonly you: string;
+    readonly told: string;
+    readonly muted: string;
+    readonly toldHint: string;
+    readonly mutedHint: string;
+    readonly mute: string;
+    readonly unmute: string;
+    readonly choose: string;
+    readonly chooseHint: string;
+    readonly theDefault: string;
+    readonly save: string;
   };
   readonly activity: {
     readonly title: string;
@@ -157,7 +225,7 @@ const EN: Words = {
   languages: { en: "English", ko: "Korean" },
   connection: {
     title: "Slack",
-    lead: "The workspace's Slack, connected through an app the console makes and keeps.",
+    lead: "Slack, connected through one app the console makes and keeps, installed in each workspace that takes it.",
     next: "Next",
     ready: "Ready",
     problem: "Something went wrong",
@@ -208,19 +276,41 @@ const EN: Words = {
     openInSlack: "Open in Slack",
     make: "Make the app",
     update: "Update the app",
-    install: "Installed in the workspace",
-    installed: (team) => `Installed in ${team}.`,
+    install: "Installed in a workspace",
+    installedIn: (names) => `Installed in ${names}.`,
     notInstalled: "Not installed yet.",
     installOpen: "Install in Slack",
-    installPrepare: "Prepare the installation",
+    installAnother: "Install in another workspace",
+    installPrepare: "Prepare an installation link",
+    installLink: (until) =>
+      `Or hand this link to whoever may install apps there. It is good once, until ${until}:`,
     installHint:
-      "Someone who may install apps in the workspace presses it; Slack's page opens in a new tab and comes back here.",
-    installedBy: (who, when) => `By ${who}, ${when}`,
+      "Someone who may install apps in a workspace opens it in a new tab, with or without an account on the console; Slack then opens the app there.",
+    distribution:
+      "A workspace other than the one the app was made in takes it once its distribution is turned on, once, on Slack's page: Activate Public Distribution.",
+    openDistribution: "Open Slack's distribution page",
+    workspaces: "Workspaces",
+    noWorkspace: "The app is not installed in a workspace yet.",
+    people: "People",
+    botToken: "Bot token",
+    tokenKept: "Kept",
+    default: "Default",
+    defaultHint:
+      "The default workspace is told of every project no other is named for, and of a person's own work where they have an account there.",
+    makeDefault: "Make default",
+    matchedCount: (count) => `${count} matched`,
+    notMatchedYet: "Matched within the hour",
+    remove: "Disconnect",
+    removeSure: "Press again to uninstall",
+    waiting: "Waiting",
+    accept: "Accept",
+    acceptHint:
+      "A workspace that installed the app through a link waits until you accept it: nothing is matched or told there before. Accept a workspace you know; disconnect any other.",
     done: "Done",
     todo: "To do",
     blocked: "Opens once the steps above are done.",
     appEdit: "Change the language, the names or the icon",
-    details: "The connection",
+    details: "The app",
     workspace: "Workspace",
     bot: "Bot user",
     shortcut: "Leave shortcut",
@@ -233,7 +323,6 @@ const EN: Words = {
       slackConfigRefreshToken: "Configuration refresh token",
       slackClientSecret: "Client secret",
       slackSigningSecret: "Signing secret",
-      slackBotToken: "Bot token",
     },
     secretFrom: (source) => `Received from ${source}`,
     secretPasted: "Set by an administrator",
@@ -264,20 +353,22 @@ const EN: Words = {
     testChannel: "Channel",
     testChannelHint: "A channel's id (C0123ABCD); left empty, a direct message to you.",
     test: "Send a test message",
-    disconnect: "Disconnect",
+    disconnect: "Disconnect everything",
     disconnectSure: "Press again to uninstall and delete",
     disconnectHint:
-      "Uninstalls the app from the workspace and deletes it. Connecting again makes a new app: in this workspace, the routes and the matched accounts stay; in another, they go, and its people are matched within the hour.",
+      "Uninstalls the app from every workspace and deletes it, to start again with a new one. Each workspace keeps its routes and its matched accounts, which come back when the app is installed there again.",
     failures: (count) => `${count} deliveries failed in the last day; the Activity page says why.`,
   },
   routes: {
     title: "Routes",
     lead: "Which events go to which channel, in which language, under whose name.",
-    notConnected: "Connect Slack first: a route names a channel of the workspace.",
+    notConnected: "Connect Slack first: a route names a channel of a workspace.",
     list: "Routes",
     none: "No route yet: nothing goes to a channel.",
     kind: "What",
     channel: "Channel",
+    workspace: "Workspace",
+    workspaceGone: "Not installed now",
     language: "Language",
     as: "Under whose name",
     kinds: { "hr:leave-approved": "Leave, once approved" },
@@ -319,15 +410,72 @@ const EN: Words = {
       matched: "Messages about them carry their name; they may use the shortcut and the buttons.",
       no_email:
         "The console knows no address for them: an administrator writes it on the console's People page.",
-      no_account: "No member of the workspace has their address.",
+      no_account: "No member of any workspace the app is in has their address.",
       not_checked: "Matched at the next run.",
     },
     all: "Everyone",
     person: "Person",
     state: "State",
     account: "Slack account",
+    accountIn: (name, workspace) => `${name} in ${workspace}`,
     nobody: "Nobody here.",
     more: (shown, total) => `${shown} of ${total} shown.`,
+  },
+  notifications: {
+    title: "My notifications",
+    lead: "What you are told in Slack of your own work, and when. Your agent chooses the same with notify.",
+    noAccount:
+      "No Slack account of yours is matched in a workspace the app is in, so nothing reaches you yet: the address in Slack is the one the console knows for you.",
+    choose: "What, and when",
+    what: "Tell me of",
+    whatHint: "Each message has a button that turns its kind off.",
+    kinds: {
+      assigned: "Tasks given to me",
+      moved: "My tasks moved",
+      changed: "My tasks changed",
+      commented: "Comments on my tasks",
+      archived: "My tasks put away",
+      decisions: "Decisions waiting on me",
+      agents: "My agent accounts",
+    },
+    when: "When",
+    cadences: { now: "As it happens", daily: "Once a day" },
+    at: "At",
+    atHint: (zone) => `In the workspace's time zone, ${zone}, within the hour after.`,
+    agents: "My agents",
+    ownAgents: "Tell me what my own agents did for me too",
+    save: "Save",
+    where: "Where",
+    workspace: "Workspace",
+    nowhere: "Nowhere yet.",
+    whereHint:
+      "In a direct message, in the workspace the project is told in where you have an account there, else the default.",
+    waiting: (count) => `${count} waiting for the day's message.`,
+    muted: "Projects turned off",
+    unmute: "Turn on",
+    defaults: "Back to the defaults",
+    defaultsHint:
+      "Tasks given to you, your tasks moved, comments on them, decisions waiting on you and your agent accounts, as they happen.",
+    reset: "Reset",
+  },
+  project: {
+    title: "Slack",
+    lead: "Where this project is told in Slack, and whether you are told of it.",
+    notConnected: "Slack is not connected yet.",
+    here: "This project",
+    workspace: "Workspace",
+    byDefault: "Default",
+    you: "You",
+    told: "Told",
+    muted: "Turned off",
+    toldHint: "You are told of your own work here, as you chose on My notifications.",
+    mutedHint: "You are told nothing of this project.",
+    mute: "Turn off for me",
+    unmute: "Turn on for me",
+    choose: "Told in",
+    chooseHint: "The workspace whose people work on this project.",
+    theDefault: "The default workspace",
+    save: "Save",
   },
   activity: {
     title: "Activity",
@@ -386,7 +534,7 @@ const KO: Words = {
   languages: { en: "영어", ko: "한국어" },
   connection: {
     title: "Slack",
-    lead: "콘솔이 만들고 관리하는 앱으로 워크스페이스의 Slack을 연결합니다.",
+    lead: "콘솔이 만들고 관리하는 앱 하나로 Slack을 연결하고, 받아들이는 워크스페이스마다 설치합니다.",
     next: "다음 할 일",
     ready: "준비 완료",
     problem: "문제가 생겼습니다",
@@ -435,18 +583,40 @@ const KO: Words = {
     make: "앱 만들기",
     update: "앱 업데이트",
     install: "워크스페이스에 설치",
-    installed: (team) => `${team}에 설치됨.`,
+    installedIn: (names) => `${names}에 설치됨.`,
     notInstalled: "아직 설치하지 않았습니다.",
     installOpen: "Slack에 설치",
-    installPrepare: "설치 준비",
+    installAnother: "다른 워크스페이스에 설치",
+    installPrepare: "설치 링크 만들기",
+    installLink: (until) =>
+      `또는 그곳에 앱을 설치할 수 있는 사람에게 이 링크를 전하세요. ${until}까지 한 번 쓸 수 있습니다:`,
     installHint:
-      "워크스페이스에 앱을 설치할 수 있는 사람이 누르세요. 새 탭에 Slack 페이지가 열리고, 설치하면 이 페이지로 돌아옵니다.",
-    installedBy: (who, when) => `${who}, ${when}`,
+      "워크스페이스에 앱을 설치할 수 있는 사람이 새 탭에서 엽니다. 콘솔 계정이 없어도 됩니다. 설치하면 Slack이 그곳에서 앱을 엽니다.",
+    distribution:
+      "앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 켜야 합니다.",
+    openDistribution: "Slack 배포 페이지 열기",
+    workspaces: "워크스페이스",
+    noWorkspace: "아직 앱을 설치한 워크스페이스가 없습니다.",
+    people: "사람",
+    botToken: "봇 토큰",
+    tokenKept: "보관됨",
+    default: "기본",
+    defaultHint:
+      "기본 워크스페이스에는 다른 곳에 정하지 않은 모든 프로젝트를 알리고, 그곳에 계정이 있는 사람에게 본인 일을 알립니다.",
+    makeDefault: "기본으로",
+    matchedCount: (count) => `${count}명 연결`,
+    notMatchedYet: "한 시간 안에 연결",
+    remove: "연결 해제",
+    removeSure: "한 번 더 누르면 제거합니다",
+    waiting: "수락 대기",
+    accept: "수락",
+    acceptHint:
+      "링크로 앱을 설치한 워크스페이스는 수락할 때까지 기다립니다. 그 전에는 계정을 연결하지도, 알리지도 않습니다. 아는 워크스페이스만 수락하고, 아니면 연결을 해제하세요.",
     done: "완료",
     todo: "할 일",
     blocked: "위 단계를 마치면 열립니다.",
     appEdit: "언어, 이름, 아이콘 바꾸기",
-    details: "연결",
+    details: "앱",
     workspace: "워크스페이스",
     bot: "봇 사용자",
     shortcut: "휴가 단축키",
@@ -459,7 +629,6 @@ const KO: Words = {
       slackConfigRefreshToken: "설정 갱신 토큰",
       slackClientSecret: "클라이언트 시크릿",
       slackSigningSecret: "서명 시크릿",
-      slackBotToken: "봇 토큰",
     },
     secretFrom: (source) => `${source}에서 받아 저장됨`,
     secretPasted: "관리자가 설정",
@@ -489,10 +658,10 @@ const KO: Words = {
     testChannel: "채널",
     testChannelHint: "채널 ID(C0123ABCD). 비워 두면 나에게 DM으로 보냅니다.",
     test: "시험 메시지 보내기",
-    disconnect: "연결 해제",
+    disconnect: "모두 연결 해제",
     disconnectSure: "한 번 더 누르면 제거하고 지웁니다",
     disconnectHint:
-      "워크스페이스에서 앱을 제거하고 지웁니다. 다시 연결하면 새 앱을 만듭니다. 같은 워크스페이스면 채널 알림과 계정 연결이 그대로 남고, 다른 워크스페이스면 지워지며 그곳 사람들의 계정은 한 시간 안에 다시 연결됩니다.",
+      "모든 워크스페이스에서 앱을 제거하고 지워, 새 앱으로 다시 시작합니다. 워크스페이스마다 채널 알림과 계정 연결은 남아, 그곳에 다시 설치하면 돌아옵니다.",
     failures: (count) =>
       `지난 하루 동안 ${count}건을 보내지 못했습니다. 전송 기록에서 이유를 보세요.`,
   },
@@ -504,6 +673,8 @@ const KO: Words = {
     none: "아직 경로가 없어 채널로 가는 알림이 없습니다.",
     kind: "알림",
     channel: "채널",
+    workspace: "워크스페이스",
+    workspaceGone: "지금은 설치되지 않음",
     language: "언어",
     as: "누구 이름으로",
     kinds: { "hr:leave-approved": "승인된 휴가" },
@@ -543,15 +714,72 @@ const KO: Words = {
     stateHints: {
       matched: "이 사람에 관한 메시지에 이름이 실리고, 단축키와 버튼을 쓸 수 있습니다.",
       no_email: "콘솔에 이메일이 없습니다. 관리자가 콘솔의 사람 페이지에서 적어야 합니다.",
-      no_account: "이 이메일을 쓰는 워크스페이스 멤버가 없습니다.",
+      no_account: "앱이 설치된 어느 워크스페이스에도 이 이메일을 쓰는 멤버가 없습니다.",
       not_checked: "다음 맞추기에서 확인합니다.",
     },
     all: "모두",
     person: "사람",
     state: "상태",
     account: "Slack 계정",
+    accountIn: (name, workspace) => `${workspace}의 ${name}`,
     nobody: "해당하는 사람이 없습니다.",
     more: (shown, total) => `${total}명 중 ${shown}명을 보여 줍니다.`,
+  },
+  notifications: {
+    title: "내 알림",
+    lead: "내 일 가운데 무엇을 언제 Slack으로 받을지 정합니다. 내 에이전트도 notify로 똑같이 정할 수 있습니다.",
+    noAccount:
+      "앱이 설치된 워크스페이스에 연결된 내 Slack 계정이 없어 아직 아무것도 받지 못합니다. Slack의 이메일이 콘솔에 있는 내 이메일과 같아야 합니다.",
+    choose: "무엇을, 언제",
+    what: "알려 줄 것",
+    whatHint: "메시지마다 그 종류를 끄는 버튼이 있습니다.",
+    kinds: {
+      assigned: "나에게 맡겨진 태스크",
+      moved: "내 태스크의 상태 이동",
+      changed: "내 태스크의 변경",
+      commented: "내 태스크의 댓글",
+      archived: "내 태스크의 보관",
+      decisions: "나를 기다리는 결정",
+      agents: "내 에이전트 계정",
+    },
+    when: "언제",
+    cadences: { now: "그때그때", daily: "하루 한 번" },
+    at: "시각",
+    atHint: (zone) => `워크스페이스 시간대(${zone}) 기준이며, 그 시각부터 한 시간 안에 보냅니다.`,
+    agents: "내 에이전트",
+    ownAgents: "내 에이전트가 나 대신 한 일도 알려 주기",
+    save: "저장",
+    where: "받는 곳",
+    workspace: "워크스페이스",
+    nowhere: "아직 없음.",
+    whereHint:
+      "DM으로 받습니다. 프로젝트를 알리는 워크스페이스에 내 계정이 있으면 그곳에서, 없으면 기본 워크스페이스에서 받습니다.",
+    waiting: (count) => `하루 알림을 기다리는 것 ${count}건.`,
+    muted: "끈 프로젝트",
+    unmute: "켜기",
+    defaults: "기본값으로",
+    defaultsHint:
+      "맡겨진 태스크, 내 태스크의 상태 이동과 댓글, 나를 기다리는 결정, 내 에이전트 계정을 그때그때 받습니다.",
+    reset: "되돌리기",
+  },
+  project: {
+    title: "Slack 알림",
+    lead: "이 프로젝트를 Slack의 어느 워크스페이스에 알리는지, 내가 받는지 봅니다.",
+    notConnected: "아직 Slack이 연결되지 않았습니다.",
+    here: "이 프로젝트",
+    workspace: "워크스페이스",
+    byDefault: "기본",
+    you: "나",
+    told: "받음",
+    muted: "끔",
+    toldHint: "내 알림에서 고른 대로 이 프로젝트의 내 일을 받습니다.",
+    mutedHint: "이 프로젝트의 알림은 받지 않습니다.",
+    mute: "나는 끄기",
+    unmute: "나는 켜기",
+    choose: "알리는 곳",
+    chooseHint: "이 프로젝트를 하는 사람들이 쓰는 워크스페이스.",
+    theDefault: "기본 워크스페이스",
+    save: "저장",
   },
   activity: {
     title: "전송 기록",

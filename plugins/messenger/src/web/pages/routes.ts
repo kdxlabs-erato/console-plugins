@@ -1,5 +1,6 @@
-// The routes page: which kind goes to which channel, in which language and under whose name, with
-// the way to take one away, and a form that adds one, its channels listed from Slack.
+// The routes page: which kind goes to which channel of which workspace, in which language and under
+// whose name, with the way to take one away, and a form that adds one, its channels listed from
+// Slack for the workspace chosen.
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import {
   type ChannelView,
@@ -12,6 +13,7 @@ import {
   type RouteKind,
   type RouteView,
   type StatusReport,
+  type WorkspaceView,
 } from "../../shared/contracts.js";
 import {
   actions,
@@ -47,6 +49,7 @@ function routeRows(
   frame: PluginFrame,
   words: Words,
   routes: readonly RouteView[],
+  withWorkspace: boolean,
 ): HTMLTableRowElement[] {
   const w = words.routes;
   return routes.map((route) => {
@@ -61,9 +64,13 @@ function routeRows(
     );
     const cellContent = document.createElement("span");
     cellContent.append(remove, status);
+    const where = route.connected
+      ? (route.teamName ?? route.teamId)
+      : `${route.teamName ?? route.teamId} (${w.workspaceGone})`;
     return row([
       w.kinds[route.kind],
       `#${route.channelName}`,
+      ...(withWorkspace ? [where] : []),
       words.languages[route.language],
       w.asNames[route.as],
       cellContent,
@@ -75,8 +82,13 @@ function addForm(
   frame: PluginFrame,
   words: Words,
   language: Language,
-  connected: boolean,
+  workspaces: readonly WorkspaceView[],
 ): HTMLElement {
+  const connected = workspaces.length > 0;
+  const workspace = select(
+    workspaces.map((found) => ({ value: found.teamId, label: found.teamName ?? found.teamId })),
+    workspaces[0]?.teamId,
+  );
   const w = words.routes;
   const kind = select(
     ROUTE_KINDS.map((value) => ({ value, label: w.kinds[value] })),
@@ -89,10 +101,12 @@ function addForm(
   const channel = select([{ value: "", label: connected ? w.channelPick : w.connectFirst }], "");
   channel.disabled = true;
   const said = statusLine();
-  // The channels are Slack's to list: before Slack is connected there are none to ask for.
-  if (connected) {
+  // The channels are Slack's to list, of the workspace chosen: before Slack is connected there are
+  // none to ask for.
+  const listChannels = () => {
+    channel.disabled = true;
     void frame
-      .query("channels")
+      .query("channels", { workspace: workspace.value })
       .then((answer) => {
         const channels = answer as readonly ChannelView[];
         channel.replaceChildren();
@@ -113,6 +127,10 @@ function addForm(
       .catch((error: unknown) => {
         say(said, errorText(error, words), "error");
       });
+  };
+  if (connected) {
+    listChannels();
+    workspace.addEventListener("change", listChannels);
   }
   const languages = pills<Language>(
     LANGUAGES.map((value) => ({ value, label: words.languages[value] })),
@@ -130,6 +148,7 @@ function addForm(
   const node = form(
     field(w.kind, kind),
     kindHint,
+    ...(workspaces.length > 1 ? [field(w.workspace, workspace)] : []),
     field(w.channel, channel),
     group(w.language, languages.node),
     group(w.as, as.node),
@@ -142,6 +161,7 @@ function addForm(
       return;
     }
     await runCommand(frame, submit, said, words, "route", {
+      workspace: workspace.value,
       channel: channel.value,
       kind: kind.value,
       language: languages.value(),
@@ -174,7 +194,9 @@ export async function renderRoutes(
     if (!fresh()) {
       return;
     }
-    const connected = status.connection?.phase === "connected";
+    const connected = status.workspaces.length > 0;
+    // The workspace of each route is said where there is more than one to tell apart.
+    const withWorkspace = status.workspaces.length > 1 || routes.some((route) => !route.connected);
     const parts: HTMLElement[] = [pageHead(w.title, w.lead)];
     if (!connected) {
       parts.push(callout(w.notConnected, undefined, "warning"));
@@ -187,7 +209,17 @@ export async function renderRoutes(
             w.list,
             routes.length === 0
               ? empty(w.none)
-              : table([w.kind, w.channel, w.language, w.as, ""], routeRows(frame, words, routes)),
+              : table(
+                  [
+                    w.kind,
+                    w.channel,
+                    ...(withWorkspace ? [w.workspace] : []),
+                    w.language,
+                    w.as,
+                    "",
+                  ],
+                  routeRows(frame, words, routes, withWorkspace),
+                ),
           ),
         ],
         [
@@ -195,7 +227,7 @@ export async function renderRoutes(
             frame,
             words,
             status.workspaceLanguage ?? languageOf(frame.context.language),
-            connected,
+            status.workspaces,
           ),
         ],
       ),

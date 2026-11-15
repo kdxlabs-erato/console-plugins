@@ -62,7 +62,10 @@ describe("match", () => {
       null,
       "page-2",
     ]);
-    expect(result.data).toEqual({ matched: 2, unmatched: 2 });
+    expect(result.data).toEqual({ workspaces: [{ teamId: TEAM, matched: 2, unmatched: 2 }] });
+    expect(slack.of("users.list")[0]?.secrets).toEqual([
+      { name: "slackBotToken", key: TEAM, as: "bearer" },
+    ]);
     const links = ctx.all("links").filter((record) => record.archivedAt === null);
     expect(links.map((record) => [record.data.personId, record.data.memberId]).sort()).toEqual(
       [
@@ -120,7 +123,47 @@ describe("match", () => {
     const none = await match.run(ctx, {
       person: { id: HANA.id, login: HANA.login, name: HANA.name },
     });
-    expect(none.data).toEqual({ person: HANA.id, matched: false });
+    expect(none.data).toEqual({ person: HANA.id, matched: false, workspaces: 0 });
+  });
+
+  it("matches in each workspace the app is installed in, a link for each", async () => {
+    const slack = fakeSlack({
+      "users.list": (params) => ({
+        ok: true,
+        members: [member(params.cursor === undefined ? "U0MINSU01" : "U0X", "minsu@acme.example")],
+      }),
+      "users.lookupByEmail": () => ({ ok: true, user: member("U0MINSU09", "minsu@acme.example") }),
+    });
+    const { ctx } = setup({ slack });
+    await connected(ctx);
+    await connected(ctx, "ko", { id: "T0OTHER01", name: "Other" });
+    const all = await match.run(ctx, {});
+    expect(slack.of("users.list").map((call) => call.secrets[0]?.key)).toEqual([TEAM, "T0OTHER01"]);
+    expect(all.text.split("\n")).toHaveLength(2);
+    const live = ctx.all("links").filter((record) => record.archivedAt === null);
+    expect(live.map((record) => [record.data.personId, record.data.teamId]).sort()).toEqual(
+      [
+        [MINSU.id, TEAM],
+        [MINSU.id, "T0OTHER01"],
+      ].sort(),
+    );
+    // One workspace named, the others are left as they are.
+    const one = await match.run(ctx, {
+      person: { id: MINSU.id, login: MINSU.login, name: MINSU.name },
+      workspace: "T0OTHER01",
+    });
+    expect(one.data).toMatchObject({ matched: true, workspaces: 1 });
+    expect(slack.of("users.lookupByEmail")).toHaveLength(1);
+    const report = (await people.run(ctx, {})) as PeopleReport;
+    expect(report.workspaces.map((found) => found.teamId)).toEqual([TEAM, "T0OTHER01"]);
+    expect(report.people.find((row) => row.person.id === MINSU.id)?.slack).toHaveLength(2);
+    const narrowed = (await people.run(ctx, { workspace: "T0OTHER01" })) as PeopleReport;
+    expect(narrowed.people.find((row) => row.person.id === MINSU.id)?.slack).toEqual([
+      { teamId: "T0OTHER01", memberId: "U0MINSU09", name: "Shown U0MINSU09" },
+    ]);
+    await expect(match.run(ctx, { workspace: "T0NOWHERE" })).rejects.toMatchObject({
+      code: "unknown_workspace",
+    });
   });
 
   it("refuses before Slack is connected, and to whoever does not hold the role", async () => {

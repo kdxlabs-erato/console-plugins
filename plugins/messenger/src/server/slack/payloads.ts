@@ -88,12 +88,27 @@ export const actionsPayload = z.object({
 });
 export type ActionsPayload = z.infer<typeof actionsPayload>;
 
-/** The workspace a payload came from: the presser's, else the payload's. */
+/**
+ * The workspace a payload came from, the one the app answers it in: the payload's own, else the
+ * presser's. In a channel shared between workspaces the presser's may be another, whose token is
+ * not the one this press's form or trigger belongs to.
+ */
 export function teamOf(payload: {
   readonly user: { readonly team_id?: string | undefined };
   readonly team?: { readonly id: string } | null | undefined;
 }): string | null {
-  return payload.user.team_id ?? payload.team?.id ?? null;
+  return payload.team?.id ?? payload.user.team_id ?? null;
+}
+
+const located = z.object({
+  user: z.object({ team_id: slackId.optional() }).optional(),
+  team,
+});
+
+/** The workspace any payload came from, read before its kind's schema: none where it says none. */
+export function teamOfPayload(json: unknown): string | null {
+  const parsed = located.safeParse(json);
+  return parsed.success ? (parsed.data.team?.id ?? parsed.data.user?.team_id ?? null) : null;
 }
 
 /** Only Slack's own address for an answer to a press is followed, over https. */

@@ -135,6 +135,43 @@ export function pills<K extends string>(
   };
 }
 
+/** Several choices among a few, each a chip lit while chosen: the console's toggle chips. */
+export function checks<K extends string>(
+  options: readonly Option<K>[],
+  initial: ReadonlySet<K>,
+  label: string,
+): { readonly node: HTMLElement; chosen(): K[] } {
+  const node = el("fieldset", "sc-toggle-chips pills");
+  node.setAttribute("aria-label", label);
+  const boxes = new Map<K, HTMLInputElement>();
+  for (const option of options) {
+    const chip = el("label", "sc-toggle-chip pill");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = initial.has(option.value);
+    boxes.set(option.value, box);
+    chip.append(box, el("span", "", option.label));
+    node.append(chip);
+  }
+  return {
+    node,
+    chosen: () => [...boxes].filter(([, box]) => box.checked).map(([key]) => key),
+  };
+}
+
+/** A tick with its words. */
+export function check(
+  label: string,
+  checked: boolean,
+): { readonly node: HTMLElement; checked(): boolean } {
+  const node = el("label", "sc-check");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = checked;
+  node.append(box, el("span", "", label));
+  return { node, checked: () => box.checked };
+}
+
 /** One choice among a few that want a line each: a card per option. */
 export function optionCards<K extends string>(
   options: readonly Option<K>[],

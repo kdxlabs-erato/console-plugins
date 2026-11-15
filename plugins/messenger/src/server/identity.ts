@@ -4,7 +4,7 @@
 // (@) from it and refuses a name it cannot. The plugin reads the handle back once it is installed.
 import { type PluginContext, PluginError } from "@skillcdn/console/plugin";
 import { addressState } from "./address.js";
-import { refusalOf, SlackError, slack, textOf } from "./slack/api.js";
+import { bot, refusalOf, SlackError, slack, textOf } from "./slack/api.js";
 import { clean } from "./slack/blocks.js";
 import { serverWords } from "./words.js";
 
@@ -82,10 +82,20 @@ export function manifestRefusal(ctx: PluginContext, error: unknown): PluginError
   return refusalOf(ctx, error);
 }
 
-/** The bot's handle as Slack made it, read with the bot's token; none where Slack does not say. */
-export async function handleOf(ctx: PluginContext, botUserId: string): Promise<string | null> {
+/**
+ * The bot's handle in a workspace as Slack made it, read with the bot's token there; none where
+ * Slack does not say.
+ */
+export async function handleOf(
+  ctx: PluginContext,
+  teamId: string,
+  botUserId: string,
+): Promise<string | null> {
   try {
-    const name = textOf(await slack(ctx, "users.info", { user: botUserId }), "user.name");
+    const name = textOf(
+      await slack(ctx, "users.info", { user: botUserId }, bot(teamId)),
+      "user.name",
+    );
     return name !== null && HANDLE.test(name) ? name : null;
   } catch (error) {
     ctx.log.warn("the bot's handle was not read", {

@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChannelView, RouteView } from "../shared/contracts.js";
 import { channels, route, routesQuery, unroute } from "./index.js";
-import { connected, fakeSlack, KEEPER_KO, STRANGER, setup } from "./test-fakes.js";
+import { connected, fakeSlack, KEEPER_KO, STRANGER, setup, TEAM } from "./test-fakes.js";
 
 const workspace = fakeSlack({
   "conversations.info": (params) =>
@@ -35,6 +35,7 @@ describe("route", () => {
     expect(result.text).toContain("#general");
     expect(ctx.all("routes")[0]?.data).toEqual({
       kind: "hr:leave-approved",
+      teamId: TEAM,
       channelId: "C0GENERAL",
       channelName: "general",
       language: "ko",
@@ -93,6 +94,24 @@ describe("route", () => {
     await expect(route.run(other.ctx, { channel: "C0GENERAL" })).rejects.toMatchObject({
       code: "forbidden",
     });
+  });
+});
+
+describe("a workspace of several", () => {
+  it("routes a channel of the workspace named, refused while it is not said which", async () => {
+    const { ctx } = setup({ slack: workspace });
+    await connected(ctx);
+    await connected(ctx, "ko", { id: "T0OTHER01", name: "Other" });
+    await expect(route.run(ctx, { channel: "C0GENERAL" })).rejects.toMatchObject({
+      code: "workspace_needed",
+    });
+    await route.run(ctx, { channel: "C0GENERAL", workspace: "T0OTHER01" });
+    expect(workspace.of("conversations.info").at(-1)?.secrets[0]?.key).toBe("T0OTHER01");
+    expect(ctx.all("routes")[0]?.data.teamId).toBe("T0OTHER01");
+    const views = (await routesQuery.run(ctx, {})) as RouteView[];
+    expect(views[0]).toMatchObject({ teamId: "T0OTHER01", teamName: "Other", connected: true });
+    await channels.run(ctx, { workspace: "T0OTHER01" });
+    expect(workspace.of("conversations.list").at(-1)?.secrets[0]?.key).toBe("T0OTHER01");
   });
 });
 

@@ -32,13 +32,33 @@ export function outbound(
 
 const FORM = "application/x-www-form-urlencoded; charset=utf-8";
 
-/** The token a call carries: the bot's, the app configuration's, or none. */
-export type SlackAuth = "bot" | "config" | "none";
+/**
+ * The token a call carries: the bot's of a workspace, kept under the workspace's id (ADR-0014);
+ * the app configuration's; or none.
+ */
+export type SlackAuth = { readonly team: string } | "config" | "none";
 
-const TOKEN: Readonly<Record<Exclude<SlackAuth, "none">, SecretUse>> = {
-  bot: { name: "slackBotToken", as: "bearer" },
-  config: { name: "slackConfigToken", as: "bearer" },
-};
+/** The bot's token of a workspace, for a call made there. */
+export function bot(teamId: string): SlackAuth {
+  return { team: teamId };
+}
+
+/** The secret the bot's token is kept in, a value per workspace. */
+const BOT_TOKEN = "slackBotToken";
+
+function tokenOf(auth: Exclude<SlackAuth, "none">): SecretUse {
+  return auth === "config"
+    ? { name: "slackConfigToken", as: "bearer" }
+    : { name: BOT_TOKEN, key: auth.team, as: "bearer" };
+}
+
+/** The console's refusal of a call whose secret holds no value. */
+function isUnset(error: unknown): boolean {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  return (
+    code === "plugin.forbidden" && typeof message === "string" && message.includes("is not set")
+  );
+}
 
 /** What Slack said was wrong in what it was given: where (a JSON pointer) and why, in its words. */
 export interface SlackProblem {
@@ -148,16 +168,31 @@ export async function slackCall(
   options: SlackCallOptions,
 ): Promise<SlackAnswer> {
   const secrets = [
-    ...(options.auth === "none" ? [] : [TOKEN[options.auth]]),
+    ...(options.auth === "none" ? [] : [tokenOf(options.auth)]),
     ...(options.secrets ?? []),
   ];
-  const response = await outbound(ctx, `${SLACK_API}/${method}`, {
+  const init: PluginFetchInit = {
     method: "POST",
     headers: { "content-type": FORM, accept: "application/json" },
     body: formOf(params),
     ...(secrets.length === 0 ? {} : { secrets }),
     ...(options.seal === undefined ? {} : { seal: options.seal }),
-  });
+  };
+  let response: PluginFetchResponse;
+  try {
+    response = await outbound(ctx, `${SLACK_API}/${method}`, init);
+  } catch (error) {
+    // A bot token kept from before it was kept per workspace, which the upgrade could not move
+    // where its role had no secrets: moved under the workspace the call is for, and tried again.
+    const auth = options.auth;
+    if (typeof auth !== "object" || !isUnset(error)) {
+      throw error;
+    }
+    if (!(await ctx.secrets.move(BOT_TOKEN, auth.team).catch(() => false))) {
+      throw error;
+    }
+    response = await outbound(ctx, `${SLACK_API}/${method}`, init);
+  }
   if (response.status === 429) {
     const seconds = retryAfterOf(response);
     throw new PluginError(
@@ -188,7 +223,7 @@ export async function slack(
   ctx: PluginContext,
   method: string,
   params: Readonly<Record<string, unknown>>,
-  auth: SlackAuth = "bot",
+  auth: SlackAuth,
 ): Promise<Record<string, unknown>> {
   return (await slackCall(ctx, method, params, { auth })).body;
 }

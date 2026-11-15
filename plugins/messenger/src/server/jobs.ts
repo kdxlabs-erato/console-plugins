@@ -1,29 +1,34 @@
-// What time brings: every hour the configuration token is renewed before it expires and the app's
-// manifest written where it differs, the people matched the first time once Slack is connected;
-// every day the people matched again, so that a new member, a left one or a changed account is
-// caught where no event said so.
+// What time brings: every hour the records brought to their shape where an upgrade did not run,
+// the configuration token renewed before it expires, the app's manifest written where it differs,
+// each workspace checked that it still has the app, and the people of a workspace installed since
+// matched the first time; every day the people matched again in every workspace, so that a new
+// member, a left one or a changed account is caught where no event said so; and every hour the
+// message of the day sent to each person who chose one, once their time has come.
 import type { JobDefinition, PluginContext } from "@skillcdn/console/plugin";
 import { keepConnection } from "./connection.js";
 import { matchEveryone } from "./matching.js";
-import { connectionOf, isConnected, noteProblem } from "./store.js";
+import { day } from "./notices.js";
+import { connectionsOf, noteTeamProblem } from "./store.js";
 
 async function matchWhenConnected(ctx: PluginContext, onlyFirst: boolean): Promise<void> {
-  const connection = await connectionOf(ctx);
-  if (!isConnected(connection) || (onlyFirst && connection.data.matchedAt !== null)) {
-    return;
-  }
-  try {
-    await matchEveryone(ctx, connection);
-  } catch (error) {
-    ctx.log.warn("the matching did not complete", {
-      code: error instanceof Error ? error.name : null,
-    });
-    await noteProblem(ctx, error instanceof Error ? error.message : null);
+  for (const connection of await connectionsOf(ctx)) {
+    if (onlyFirst && connection.data.matchedAt !== null) {
+      continue;
+    }
+    try {
+      await matchEveryone(ctx, connection);
+    } catch (error) {
+      ctx.log.warn("the matching did not complete", {
+        code: error instanceof Error ? error.name : null,
+      });
+      await noteTeamProblem(ctx, connection, error instanceof Error ? error.message : null);
+    }
   }
 }
 
 export const keep: JobDefinition = {
-  about: "Renews Slack's configuration token and keeps the app's manifest current.",
+  about:
+    "Renews Slack's configuration token, keeps the app's manifest current and checks each workspace still has the app.",
   every: "PT1H",
   async run(ctx) {
     await keepConnection(ctx);
@@ -32,11 +37,11 @@ export const keep: JobDefinition = {
 };
 
 export const match: JobDefinition = {
-  about: "Matches people to their Slack accounts by email again.",
+  about: "Matches people to their Slack accounts by email again, in every workspace.",
   every: "P1D",
   async run(ctx) {
     await matchWhenConnected(ctx, false);
   },
 };
 
-export const jobs: Readonly<Record<string, JobDefinition>> = { keep, match };
+export const jobs: Readonly<Record<string, JobDefinition>> = { keep, match, day };
