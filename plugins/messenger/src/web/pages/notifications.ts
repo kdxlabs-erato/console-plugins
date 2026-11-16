@@ -20,8 +20,6 @@ import {
   errorBlock,
   factsPlain,
   field,
-  form,
-  group,
   input,
   muted,
   onSubmit,
@@ -31,6 +29,8 @@ import {
   pills,
   runCommand,
   sequenced,
+  settingsForm,
+  settingsRow,
   statusLine,
   submitButton,
   toolbar,
@@ -52,6 +52,7 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
     w.what,
   );
   const at = input("time", { value: view.at, maxLength: 5 });
+  at.classList.add("pl-messenger-field-short");
   const atField = field(w.at, at, w.atHint(view.timeZone));
   atField.hidden = view.cadence !== "daily";
   const cadence = pills<Cadence>(
@@ -65,13 +66,13 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
   const ownAgents = check(w.ownAgents, view.ownAgents);
   const said = statusLine();
   const save = submitButton(w.save);
-  const node = form(
-    group(w.what, kinds.node, muted(w.whatHint)),
-    group(w.when, cadence.node),
-    atField,
-    group(w.agents, ownAgents.node),
-    actions(save),
-    said,
+  // Each choice a row of the console's settings form, its name and hint beside its control, so
+  // that a short choice stands at a bounded width beside what it is rather than across the pane.
+  const node = settingsForm(
+    settingsRow(w.what, w.whatHint, kinds.node),
+    settingsRow(w.when, undefined, cadence.node, atField),
+    settingsRow(w.agents, undefined, ownAgents.node),
+    actions(save, said),
   );
   onSubmit(node, async () => {
     const on = kinds.chosen();
@@ -85,15 +86,18 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
   });
   main.push(panel(w.choose, node));
 
-  // Where the messages go, and what waits for the day's.
+  // Where the messages go, and what waits for the day's. With no account the warning above says
+  // so already, and the pane keeps only how a place is chosen.
   aside.push(
     panel(
       w.where,
-      view.accounts.length === 0
-        ? muted(w.nowhere)
-        : factsPlain(
-            view.accounts.map((account) => [w.workspace, account.teamName ?? account.teamId]),
-          ),
+      ...(view.accounts.length === 0
+        ? []
+        : [
+            factsPlain(
+              view.accounts.map((account) => [w.workspace, account.teamName ?? account.teamId]),
+            ),
+          ]),
       muted(w.whereHint),
       ...(view.cadence === "daily" ? [muted(w.waiting(String(view.waiting)))] : []),
     ),

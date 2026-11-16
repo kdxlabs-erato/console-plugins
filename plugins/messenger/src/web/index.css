@@ -40,6 +40,23 @@
   min-width: 0;
 }
 
+/* A setting of a form: its name in a narrow column, its controls in the rest, so that a choice
+   starts near its name and chips run along the row; one under the other on a phone, as the
+   console's settings rows stand there. A short field keeps the width of what is typed in it. */
+.pl-messenger-setting {
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+}
+
+@media (max-width: 40rem) {
+  .pl-messenger-setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pl-messenger-field-short {
+  max-width: 14rem;
+}
+
 @media (max-width: 64rem) {
   .pl-messenger-columns {
     grid-template-columns: minmax(0, 1fr);

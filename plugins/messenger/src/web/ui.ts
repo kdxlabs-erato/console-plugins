@@ -234,6 +234,34 @@ export function form(...children: HTMLElement[]): HTMLFormElement {
   return node;
 }
 
+/** A form of settings, laid out as the console's settings page lays one: a row a setting. */
+export function settingsForm(...children: HTMLElement[]): HTMLFormElement {
+  const node = el("form", "sc-form sc-settings-form");
+  node.append(...children);
+  return node;
+}
+
+/**
+ * One setting of a settings form: its name and its hint in a narrow column, its controls taking
+ * the rest of the pane, so that a row of chips runs along the row rather than down it.
+ */
+export function settingsRow(
+  label: string,
+  hint: string | undefined,
+  ...controls: HTMLElement[]
+): HTMLDivElement {
+  const node = el("div", "sc-settings-row setting");
+  const text = el("div");
+  text.append(el("span", "sc-settings-label", label));
+  if (hint !== undefined) {
+    text.append(el("p", "sc-settings-hint", hint));
+  }
+  const control = el("div", "sc-settings-control");
+  control.append(...controls);
+  node.append(text, control);
+  return node;
+}
+
 export function actions(...children: HTMLElement[]): HTMLDivElement {
   const node = el("div", "sc-form-actions");
   node.append(...children);
