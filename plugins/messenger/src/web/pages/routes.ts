@@ -198,13 +198,12 @@ export async function renderRoutes(
     // The workspace of each route is said where there is more than one to tell apart.
     const withWorkspace = status.workspaces.length > 1 || routes.some((route) => !route.connected);
     const parts: HTMLElement[] = [pageHead(w.title, w.lead)];
-    if (!connected) {
-      parts.push(callout(w.notConnected, undefined, "warning"));
-    }
-    // The routes there are lead; the form that adds one stands beside them.
+    // The routes there are lead, under the note that Slack is not connected, as every page's note
+    // stands at the top of its main column; the form that adds one stands beside them.
     parts.push(
       columns(
         [
+          ...(connected ? [] : [callout(w.notConnected.title, w.notConnected.body, "warning")]),
           panel(
             w.list,
             routes.length === 0

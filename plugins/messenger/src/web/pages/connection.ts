@@ -209,7 +209,8 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
     main.push(callout(w.problem, `${app.problem} (${when(app.problemAt)})`, "warning"));
   }
   if (status.failures > 0) {
-    main.push(callout(w.failures(String(status.failures)), undefined, "warning"));
+    const failed = w.failures(String(status.failures));
+    main.push(callout(failed.title, failed.body, "warning"));
   }
 
   // 1. The console's address.

@@ -457,18 +457,26 @@ function intlLanguage(language: string): string {
   }
 }
 
-/** An instant as people read one in their language. */
-export function dateTimeIn(language: string): (iso: string | null) => string {
-  const format = new Intl.DateTimeFormat(intlLanguage(language), {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+/**
+ * An instant as people read one in their language, by the console's one rule: the month in short,
+ * the day, the hour and the minute, and the year only where it is not this one. `now` is for
+ * the tests.
+ */
+export function dateTimeIn(language: string, now?: Date): (iso: string | null) => string {
+  const locale = intlLanguage(language);
+  const moment = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } as const;
+  const thisYear = new Intl.DateTimeFormat(locale, moment);
+  const anotherYear = new Intl.DateTimeFormat(locale, { ...moment, year: "numeric" });
   return (iso) => {
     if (iso === null) {
       return DASH;
     }
     const at = new Date(iso);
-    return Number.isNaN(at.getTime()) ? iso : format.format(at);
+    if (Number.isNaN(at.getTime())) {
+      return iso;
+    }
+    const same = at.getFullYear() === (now ?? new Date()).getFullYear();
+    return (same ? thisYear : anotherYear).format(at);
   };
 }
 

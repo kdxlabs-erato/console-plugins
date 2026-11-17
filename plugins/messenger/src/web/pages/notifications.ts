@@ -43,7 +43,7 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
   const main: HTMLElement[] = [];
   const aside: HTMLElement[] = [];
   if (view.accounts.length === 0) {
-    main.push(callout(w.noAccount, undefined, "warning"));
+    main.push(callout(w.noAccount.title, w.noAccount.body, "warning"));
   }
 
   const kinds = checks<NoticeKind>(

@@ -31,7 +31,7 @@ function build(frame: PluginFrame, words: Words, view: ProjectNoticesView): HTML
   const key = view.project?.key ?? frame.context.project?.key ?? "";
   const parts: HTMLElement[] = [pageHead(w.title, w.lead)];
   if (view.workspace === null) {
-    parts.push(callout(w.notConnected, undefined, "warning"));
+    parts.push(callout(w.notConnected.title, w.notConnected.body, "warning"));
     return parts;
   }
   const where = view.workspace.teamName ?? view.workspace.teamId;

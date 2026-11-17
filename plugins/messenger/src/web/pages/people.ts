@@ -66,7 +66,7 @@ export async function renderPeople(
     const parts: HTMLElement[] = [pageHead(w.title, w.lead, matchNow)];
     parts.push(matchStatus);
     if (!report.connected) {
-      parts.push(callout(w.notConnected, undefined, "warning"));
+      parts.push(callout(w.notConnected.title, w.notConnected.body, "warning"));
     }
     // The counts are on the filter's chips; the bar says beside them when the matching last ran.
     const lastMatched = el(

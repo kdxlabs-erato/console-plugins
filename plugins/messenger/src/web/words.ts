@@ -14,6 +14,12 @@ import type {
   RouteKind,
 } from "../shared/contracts.js";
 
+/** A note that must be read: a few words that say it, and the sentence under them. */
+export interface Note {
+  readonly title: string;
+  readonly body: string;
+}
+
 export interface Words {
   readonly failed: string;
   readonly yes: string;
@@ -109,12 +115,12 @@ export interface Words {
     readonly disconnect: string;
     readonly disconnectSure: string;
     readonly disconnectHint: string;
-    readonly failures: (count: string) => string;
+    readonly failures: (count: string) => Note;
   };
   readonly routes: {
     readonly title: string;
     readonly lead: string;
-    readonly notConnected: string;
+    readonly notConnected: Note;
     readonly list: string;
     readonly none: string;
     readonly kind: string;
@@ -139,7 +145,7 @@ export interface Words {
   readonly people: {
     readonly title: string;
     readonly lead: string;
-    readonly notConnected: string;
+    readonly notConnected: Note;
     readonly matchNow: string;
     readonly lastMatched: string;
     readonly matchedAt: (when: string) => string;
@@ -157,7 +163,7 @@ export interface Words {
   readonly notifications: {
     readonly title: string;
     readonly lead: string;
-    readonly noAccount: string;
+    readonly noAccount: Note;
     readonly choose: string;
     readonly what: string;
     readonly whatHint: string;
@@ -183,7 +189,7 @@ export interface Words {
   readonly project: {
     readonly title: string;
     readonly lead: string;
-    readonly notConnected: string;
+    readonly notConnected: Note;
     readonly here: string;
     readonly workspace: string;
     readonly byDefault: string;
@@ -224,7 +230,7 @@ const EN: Words = {
   openSettings: "Open the plugin's settings",
   languages: { en: "English", ko: "Korean" },
   connection: {
-    title: "Slack",
+    title: "Connection",
     lead: "Slack, connected through one app the console makes and keeps, installed in each workspace that takes it.",
     next: "Next",
     ready: "Ready",
@@ -357,12 +363,18 @@ const EN: Words = {
     disconnectSure: "Press again to uninstall and delete",
     disconnectHint:
       "Uninstalls the app from every workspace and deletes it, to start again with a new one. Each workspace keeps its routes and its matched accounts, which come back when the app is installed there again.",
-    failures: (count) => `${count} deliveries failed in the last day; the Activity page says why.`,
+    failures: (count) => ({
+      title: `${count} deliveries failed in the last day`,
+      body: "The Activity page says why.",
+    }),
   },
   routes: {
     title: "Routes",
     lead: "Which events go to which channel, in which language, under whose name.",
-    notConnected: "Connect Slack first: a route names a channel of a workspace.",
+    notConnected: {
+      title: "Connect Slack first",
+      body: "A route names a channel of a workspace.",
+    },
     list: "Routes",
     none: "No route yet: nothing goes to a channel.",
     kind: "What",
@@ -394,8 +406,10 @@ const EN: Words = {
   people: {
     title: "People",
     lead: "Each person matched to their Slack account by email: the console's address against the workspace's members.",
-    notConnected:
-      "Connect Slack first; then the people are matched within the hour, and every day after.",
+    notConnected: {
+      title: "Connect Slack first",
+      body: "Then the people are matched within the hour, and every day after.",
+    },
     matchNow: "Match now",
     lastMatched: "Last matched",
     matchedAt: (when) => when,
@@ -424,8 +438,10 @@ const EN: Words = {
   notifications: {
     title: "My notifications",
     lead: "What you are told in Slack of your own work, and when. Your agent chooses the same with notify.",
-    noAccount:
-      "No Slack account of yours is matched in a workspace the app is in, so nothing reaches you yet: the address in Slack is the one the console knows for you.",
+    noAccount: {
+      title: "No Slack account of yours is matched",
+      body: "None is matched in a workspace the app is in, so nothing reaches you yet: the address in Slack is the one the console knows for you.",
+    },
     choose: "What, and when",
     what: "Tell me of",
     whatHint: "Each message has a button that turns its kind off.",
@@ -459,9 +475,12 @@ const EN: Words = {
     reset: "Reset",
   },
   project: {
-    title: "Slack",
+    title: "Messenger",
     lead: "Where this project is told in Slack, and whether you are told of it.",
-    notConnected: "Slack is not connected yet.",
+    notConnected: {
+      title: "Slack is not connected yet",
+      body: "Once whoever keeps the messenger connects it, this page says where the project is told.",
+    },
     here: "This project",
     workspace: "Workspace",
     byDefault: "Default",
@@ -497,6 +516,14 @@ const EN: Words = {
       "plugin:hr:leave-cancelling": "Cancellation asked",
       "plugin:hr:leave-cancelled": "Leave cancelled",
       "plugin:hr:leave-kept": "Leave kept",
+      "console:task.created": "Task created",
+      "console:task.updated": "Task changed",
+      "console:task.moved": "Task moved",
+      "console:task.commented": "Task commented",
+      "console:task.archived": "Task put away",
+      "console:decision.raised": "Decision raised",
+      "console:decision.addressed": "Decision addressed",
+      "console:agent.state_changed": "Agent account state",
     },
     notes: {
       thread: () => "The conversation is begun and the step asked.",
@@ -533,7 +560,7 @@ const KO: Words = {
   openSettings: "플러그인 설정 열기",
   languages: { en: "영어", ko: "한국어" },
   connection: {
-    title: "Slack",
+    title: "연결",
     lead: "콘솔이 만들고 관리하는 앱 하나로 Slack을 연결하고, 받아들이는 워크스페이스마다 설치합니다.",
     next: "다음 할 일",
     ready: "준비 완료",
@@ -662,13 +689,18 @@ const KO: Words = {
     disconnectSure: "한 번 더 누르면 제거하고 지웁니다",
     disconnectHint:
       "모든 워크스페이스에서 앱을 제거하고 지워, 새 앱으로 다시 시작합니다. 워크스페이스마다 채널 알림과 계정 연결은 남아, 그곳에 다시 설치하면 돌아옵니다.",
-    failures: (count) =>
-      `지난 하루 동안 ${count}건을 보내지 못했습니다. 전송 기록에서 이유를 보세요.`,
+    failures: (count) => ({
+      title: `지난 하루 동안 ${count}건을 보내지 못했습니다`,
+      body: "전송 기록에서 이유를 보세요.",
+    }),
   },
   routes: {
     title: "채널 알림",
     lead: "어떤 알림을 어느 채널에, 어느 언어로, 누구 이름으로 보낼지 정합니다.",
-    notConnected: "먼저 Slack을 연결하세요. 경로는 워크스페이스의 채널을 가리킵니다.",
+    notConnected: {
+      title: "먼저 Slack을 연결하세요",
+      body: "경로는 워크스페이스의 채널을 가리킵니다.",
+    },
     list: "경로",
     none: "아직 경로가 없어 채널로 가는 알림이 없습니다.",
     kind: "알림",
@@ -700,7 +732,10 @@ const KO: Words = {
   people: {
     title: "계정 연결",
     lead: "콘솔의 이메일과 워크스페이스 멤버를 맞춰, 사람마다 Slack 계정을 연결합니다.",
-    notConnected: "먼저 Slack을 연결하세요. 연결하면 한 시간 안에, 그 뒤로는 매일 맞춥니다.",
+    notConnected: {
+      title: "먼저 Slack을 연결하세요",
+      body: "연결하면 한 시간 안에, 그 뒤로는 매일 계정을 맞춥니다.",
+    },
     matchNow: "지금 맞추기",
     lastMatched: "마지막으로 맞춘 때",
     matchedAt: (when) => when,
@@ -728,17 +763,19 @@ const KO: Words = {
   notifications: {
     title: "내 알림",
     lead: "내 일 가운데 무엇을 언제 Slack으로 받을지 정합니다. 내 에이전트도 notify로 똑같이 정할 수 있습니다.",
-    noAccount:
-      "앱이 설치된 워크스페이스에 연결된 내 Slack 계정이 없어 아직 아무것도 받지 못합니다. Slack의 이메일이 콘솔에 있는 내 이메일과 같아야 합니다.",
+    noAccount: {
+      title: "연결된 내 Slack 계정이 없습니다",
+      body: "앱이 설치된 워크스페이스에 내 계정이 연결되어 있지 않아 아직 아무것도 받지 못합니다. Slack의 이메일이 콘솔에 있는 내 이메일과 같아야 합니다.",
+    },
     choose: "무엇을, 언제",
     what: "알려 줄 것",
     whatHint: "메시지마다 그 종류를 끄는 버튼이 있습니다.",
     kinds: {
-      assigned: "나에게 맡겨진 태스크",
-      moved: "내 태스크의 상태 이동",
-      changed: "내 태스크의 변경",
-      commented: "내 태스크의 댓글",
-      archived: "내 태스크의 보관",
+      assigned: "나에게 맡겨진 작업",
+      moved: "내 작업의 상태 이동",
+      changed: "내 작업의 변경",
+      commented: "내 작업의 댓글",
+      archived: "내 작업의 보관",
       decisions: "나를 기다리는 결정",
       agents: "내 에이전트 계정",
     },
@@ -759,13 +796,16 @@ const KO: Words = {
     unmute: "켜기",
     defaults: "기본값으로",
     defaultsHint:
-      "맡겨진 태스크, 내 태스크의 상태 이동과 댓글, 나를 기다리는 결정, 내 에이전트 계정을 그때그때 받습니다.",
+      "맡겨진 작업, 내 작업의 상태 이동과 댓글, 나를 기다리는 결정, 내 에이전트 계정을 그때그때 받습니다.",
     reset: "되돌리기",
   },
   project: {
-    title: "Slack 알림",
+    title: "메신저",
     lead: "이 프로젝트를 Slack의 어느 워크스페이스에 알리는지, 내가 받는지 봅니다.",
-    notConnected: "아직 Slack이 연결되지 않았습니다.",
+    notConnected: {
+      title: "아직 Slack이 연결되지 않았습니다",
+      body: "메신저 담당이 Slack을 연결하면 이 프로젝트를 어디에 알리는지 여기에 보입니다.",
+    },
     here: "이 프로젝트",
     workspace: "워크스페이스",
     byDefault: "기본",
@@ -801,6 +841,14 @@ const KO: Words = {
       "plugin:hr:leave-cancelling": "취소 결재 요청",
       "plugin:hr:leave-cancelled": "휴가 취소",
       "plugin:hr:leave-kept": "휴가 유지",
+      "console:task.created": "작업 생성",
+      "console:task.updated": "작업 변경",
+      "console:task.moved": "작업 이동",
+      "console:task.commented": "작업 댓글",
+      "console:task.archived": "작업 보관",
+      "console:decision.raised": "결정 요청",
+      "console:decision.addressed": "결정 담당 지정",
+      "console:agent.state_changed": "에이전트 계정 상태",
     },
     notes: {
       thread: () => "대화를 열고 결재를 요청했습니다.",
