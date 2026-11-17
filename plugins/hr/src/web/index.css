@@ -420,7 +420,7 @@
 }
 
 .pl-hr-meter-used {
-  background: var(--sc-color-accent-solid);
+  background: var(--sc-series-1);
 }
 
 .pl-hr-meter-pending {
@@ -428,7 +428,7 @@
 }
 
 .pl-hr-meter-left {
-  background: color-mix(in srgb, var(--sc-color-accent-solid) 22%, transparent);
+  background: color-mix(in srgb, var(--sc-series-1) 22%, transparent);
 }
 
 .pl-hr-balance {
