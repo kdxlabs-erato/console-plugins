@@ -1046,7 +1046,7 @@ const KOREAN: Words = {
   noticeTimeHint: (zone) => `워크스페이스 시간대(${zone}) 기준입니다.`,
   languageLabel: "언어를 정하지 않은 사람에게 쓰는 언어",
   languageHint:
-    "콘솔에서 언어를 고른 적 없는 사람에게 결정과 태스크를 이 언어로 씁니다. 관리자가 콘솔의 워크스페이스 설정에서 정합니다.",
+    "콘솔에서 언어를 고른 적 없는 사람에게 결정과 작업을 이 언어로 씁니다. 관리자가 콘솔의 워크스페이스 설정에서 정합니다.",
   languageName: (language) => ({ en: "영어", ko: "한국어" })[language as "en" | "ko"] ?? language,
   languageUnset: (name) => `${name} (워크스페이스 언어를 아무도 정하지 않음)`,
   timeZoneLabel: "시간대",

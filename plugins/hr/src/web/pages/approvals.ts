@@ -108,7 +108,7 @@ function requestRow(
       button(
         view.mine ? words.decide : words.openDecision,
         () => frame.navigate(path),
-        view.mine ? "primary" : "ghost",
+        view.mine ? "secondary" : "ghost",
         true,
       ),
     );
@@ -230,7 +230,8 @@ export async function renderApprovals(
     pageHead(words.approvalsTitle, words.approvalsLead, record),
     recordBox,
     tabs,
-    panel(null, body),
+    // The requests are cards, which stand on the page itself as the console's own lists do.
+    body,
   );
   root.replaceChildren(node);
   frame.setTitle(words.approvalsTitle);

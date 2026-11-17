@@ -35,9 +35,10 @@ import {
   onSubmit,
   optionCards,
   optionsOf,
-  panelWith,
+  panel,
   runCommand,
   say,
+  section,
   select,
   sequenced,
   stack,
@@ -394,15 +395,18 @@ export async function policiesTab(body: HTMLElement, view: SetupView): Promise<v
       ...views.map((item) =>
         policyCard(item, view, () =>
           list.replaceChildren(
-            policyForm(
-              view,
-              item,
-              item.policy,
-              item.policy.preset,
-              presetNameOf(item.policy.preset),
-              keys,
-              saved,
-              () => void refresh(),
+            panel(
+              null,
+              policyForm(
+                view,
+                item,
+                item.policy,
+                item.policy.preset,
+                presetNameOf(item.policy.preset),
+                keys,
+                saved,
+                () => void refresh(),
+              ),
             ),
           ),
         ),
@@ -411,33 +415,41 @@ export async function policiesTab(body: HTMLElement, view: SetupView): Promise<v
     list.replaceChildren(cards);
   }
 
+  // What takes the place of the cards, a chooser or a form, is a pane, where the cards stand on
+  // the page itself.
   const chooseNew = () => {
     list.replaceChildren(
-      presetChooser(
-        presets,
-        view,
-        (preset) =>
-          list.replaceChildren(
-            policyForm(
-              view,
-              null,
-              preset.policy,
-              preset.key,
-              nameIn(preset.name, language),
-              keys,
-              saved,
-              () => void refresh(),
+      panel(
+        null,
+        presetChooser(
+          presets,
+          view,
+          (preset) =>
+            list.replaceChildren(
+              panel(
+                null,
+                policyForm(
+                  view,
+                  null,
+                  preset.policy,
+                  preset.key,
+                  nameIn(preset.name, language),
+                  keys,
+                  saved,
+                  () => void refresh(),
+                ),
+              ),
             ),
-          ),
-        () => void refresh(),
+          () => void refresh(),
+        ),
       ),
     );
   };
 
   body.append(
-    panelWith(
+    section(
       words.tabs.policies,
-      [button(words.newPolicy, chooseNew, "primary", true)],
+      [button(words.newPolicy, chooseNew, "secondary", true)],
       muted(words.policiesHint),
       status,
       list,

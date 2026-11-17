@@ -341,7 +341,7 @@ export async function renderBalanceWidget(
       line(
         next === undefined
           ? words.usedPending(format.number(annual.used), format.number(annual.pending))
-          : words.expiringBy(format.days(next.days), format.monthDay(next.on)),
+          : words.expiringBy(format.days(next.days), format.day(next.on)),
       ),
     ];
     const facts = el("dl", "widget-facts");
@@ -447,7 +447,7 @@ export async function renderTodayWidget(
     const holiday =
       next === undefined
         ? []
-        : [line(words.nextHolidayLine(nameIn(next.name, language), format.monthDay(next.on)))];
+        : [line(words.nextHolidayLine(nameIn(next.name, language), format.day(next.on)))];
     const lead = [
       figure(format.number(out.length), words.peopleUnit),
       ...(out.length === 0
@@ -506,7 +506,7 @@ export async function renderApprovalsWidget(
       opening.append(
         avatar(frame, item.person),
         el("span", "widget-row-main", personLabel(item.person)),
-        el("span", "widget-row-side sc-muted", format.monthDay(item.request.from)),
+        el("span", "widget-row-side sc-muted", format.day(item.request.from)),
         typeBadge(types.get(item.request.type), item.request.type, language),
       );
       const path = waitingDecision(item);
@@ -569,7 +569,7 @@ function announcementRows(
         el(
           "span",
           "widget-row-side sc-muted",
-          format.monthDay(dayOfInstant(frame, announcement.publishedAt ?? announcement.writtenAt)),
+          format.day(dayOfInstant(frame, announcement.publishedAt ?? announcement.writtenAt)),
         ),
       );
       return row(open);

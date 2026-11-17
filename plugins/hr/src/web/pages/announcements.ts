@@ -31,10 +31,10 @@ import {
   optionsOf,
   page,
   pageHead,
-  panel,
   personLabel,
   pills,
   say,
+  section,
   sequenced,
   stack,
   statusLine,
@@ -271,16 +271,16 @@ export async function renderAnnouncements(
   function listParts(report: AnnouncementList, drafts: readonly AnnouncementRow[]): HTMLElement[] {
     const parts: HTMLElement[] = [];
     const rows = [...report.items, ...extra];
-    // Every announcement a card, the pinned first, as many side by side as the width holds.
+    // Every announcement a card, the pinned first, as many side by side as the width holds; the
+    // cards stand on the page itself, as the console's own lists of cards do.
     if (report.pinned.length > 0 || rows.length > 0) {
-      const pane = panel(null);
       const cards = el("div", "ann-cards");
       cards.append(
         ...[...report.pinned, ...rows].map((row) => card(row, view, `${BASE}/${row.id}`)),
       );
-      pane.append(cards);
+      const list = section(null, [], cards);
       if (after !== null) {
-        pane.append(
+        list.append(
           button(
             words.announcementsMore,
             () => {
@@ -291,18 +291,16 @@ export async function renderAnnouncements(
           ),
         );
       }
-      parts.push(pane);
+      parts.push(list);
     } else {
       const filtered = category !== "all" || searching.length > 0;
-      parts.push(
-        panel(null, empty(filtered ? words.announcementsNothing : words.announcementsEmpty)),
-      );
+      parts.push(empty(filtered ? words.announcementsNothing : words.announcementsEmpty));
     }
-    // HR's own drafts, after what everyone reads: a pane of their own, titled with how many.
+    // HR's own drafts, after what everyone reads: a section of their own, titled with how many.
     if (drafts.length > 0) {
       const cards = el("div", "ann-cards");
       cards.append(...drafts.map((row) => card(row, view, `${BASE}/${row.id}/edit`)));
-      parts.push(panel(words.announcementDraftsTitle(format.number(drafts.length)), cards));
+      parts.push(section(words.announcementDraftsTitle(format.number(drafts.length)), [], cards));
     }
     return parts;
   }

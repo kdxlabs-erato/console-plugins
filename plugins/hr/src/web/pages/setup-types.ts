@@ -37,10 +37,11 @@ import {
   nameIn,
   onSubmit,
   optionsOf,
-  panelWith,
+  panel,
   pills,
   runCommand,
   say,
+  section,
   sequenced,
   settingRow,
   stack,
@@ -440,16 +441,20 @@ export async function typesTab(body: HTMLElement, view: SetupView): Promise<void
   });
 
   function openEditor(type: LeaveType | null): void {
+    // The form is a pane, where the cards it takes the place of stand on the page itself.
     list.replaceChildren(
-      typeForm(
-        type,
-        keys,
-        view,
-        async () => {
-          say(status, words.saved, "ok");
-          await refresh();
-        },
-        () => void refresh(),
+      panel(
+        null,
+        typeForm(
+          type,
+          keys,
+          view,
+          async () => {
+            say(status, words.saved, "ok");
+            await refresh();
+          },
+          () => void refresh(),
+        ),
       ),
     );
   }
@@ -467,9 +472,9 @@ export async function typesTab(body: HTMLElement, view: SetupView): Promise<void
   }
 
   body.append(
-    panelWith(
+    section(
       words.tabs.types,
-      [button(words.newType, () => openEditor(null), "primary", true)],
+      [button(words.newType, () => openEditor(null), "secondary", true)],
       muted(words.typesHint),
       status,
       list,

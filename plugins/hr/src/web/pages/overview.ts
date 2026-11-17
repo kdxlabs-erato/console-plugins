@@ -112,7 +112,7 @@ function myLeave(report: OverviewReport, view: View): HTMLElement | null {
       words.expiringNext,
       next === undefined
         ? words.nothingExpiring
-        : `${format.monthDay(next.on)} · ${format.days(next.days)}`,
+        : `${format.day(next.on)} · ${format.days(next.days)}`,
     ),
   );
   const others = (report.balance?.types ?? []).filter((type) => type.type !== ANNUAL);
@@ -220,7 +220,7 @@ function holidayList(holidays: readonly Holiday[], view: View): HTMLElement {
   for (const holiday of holidays) {
     const item = el("li", "rows-item");
     item.append(
-      el("span", "rows-day", format.monthDay(holiday.on)),
+      el("span", "rows-day", format.day(holiday.on)),
       el("span", "rows-main", nameIn(holiday.name, language)),
       el("span", "sc-muted rows-side", format.weekday(holiday.on)),
     );

@@ -426,7 +426,7 @@ export async function approvalTab(body: HTMLElement, view: SetupView): Promise<v
     return true;
   };
 
-  const saveButton = button(words.addRule, () => openRule(null), "primary", true);
+  const saveButton = button(words.addRule, () => openRule(null), "secondary", true);
 
   function openRule(index: number | null): void {
     const rule = index === null ? null : (rules[index] ?? null);

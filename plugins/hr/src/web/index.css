@@ -154,6 +154,25 @@
   margin-bottom: 0;
 }
 
+/* A section that stands on the page itself, its cards with no pane around them: the console's
+   section head and title, the title's line running up to what stands beside it. */
+.pl-hr-section {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.pl-hr-section-head {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.pl-hr-section-title {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+
 .pl-hr-head-choice {
   display: flex;
   align-items: center;
@@ -2312,7 +2331,7 @@
 .pl-hr-widget-feature-title {
   display: -webkit-box;
   overflow: hidden;
-  font-size: clamp(var(--sc-text-md), 3.2cqw, var(--sc-text-xl));
+  font-size: clamp(var(--sc-text-md), 3.2cqw, var(--sc-text-lg));
   font-weight: var(--sc-weight-bold);
   line-height: var(--sc-leading-snug);
   text-wrap: balance;

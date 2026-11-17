@@ -547,6 +547,30 @@ export function panelWith(
   return node;
 }
 
+/**
+ * A section whose cards stand on the page itself, as the console's own lists of cards do: its
+ * heading, with what is done to the list beside it, then what it holds, and no pane around them.
+ */
+export function section(
+  title: string | null,
+  controls: readonly HTMLElement[],
+  ...children: HTMLElement[]
+): HTMLElement {
+  const node = el("section", "section");
+  if (title !== null) {
+    const heading = el("h2", "sc-section-title section-title", title);
+    if (controls.length === 0) {
+      node.append(heading);
+    } else {
+      const head = el("div", "sc-section-head section-head");
+      head.append(heading, ...controls);
+      node.append(head);
+    }
+  }
+  node.append(...children);
+  return node;
+}
+
 /** A small heading above a block of a panel. */
 export function eyebrow(text: string): HTMLElement {
   return el("p", "sc-eyebrow eyebrow", text);
@@ -842,10 +866,13 @@ export function firstDayOf(frame: PluginFrame): number {
 }
 
 export interface Formatters {
+  /** A day: the month in short and the day, and the year only where it is not this one. */
   readonly day: (day: string) => string;
+  /** A day under a heading that says its year, a month's or a year's: never the year. */
   readonly monthDay: (day: string) => string;
   readonly weekday: (day: string) => string;
   readonly month: (day: string) => string;
+  /** An instant: its day as `day` writes one, then the hour and the minute. */
   readonly dateTime: (iso: string) => string;
   readonly number: (value: number) => string;
   readonly signed: (value: number) => string;
@@ -861,16 +888,21 @@ function intlLanguage(language: string): string {
   }
 }
 
-/** The formatters of a language: days and instants with Intl, figures to two decimals at most. */
-export function formattersFor(language: string, words: Words): Formatters {
+/**
+ * The formatters of a language: days and instants with Intl, figures to two decimals at most. A
+ * day and an instant follow the console's one rule, the year said only where it is not this one;
+ * `now` is for the tests.
+ */
+export function formattersFor(language: string, words: Words, now?: Date): Formatters {
   const locale = intlLanguage(language);
-  const dayFormat = new Intl.DateTimeFormat(locale, {
-    year: "numeric",
+  const thisYear = () => (now ?? new Date()).getFullYear();
+  const monthDayFormat = new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     timeZone: "UTC",
   });
-  const monthDayFormat = new Intl.DateTimeFormat(locale, {
+  const dayFormat = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
     month: "short",
     day: "numeric",
     timeZone: "UTC",
@@ -882,20 +914,22 @@ export function formattersFor(language: string, words: Words): Formatters {
     timeZone: "UTC",
   });
   // The day written as every other day on the pages is, the time after it.
-  const dateTimeFormat = new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const moment = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } as const;
+  const dateTimeFormat = new Intl.DateTimeFormat(locale, moment);
+  const dateTimeYearFormat = new Intl.DateTimeFormat(locale, { ...moment, year: "numeric" });
   const numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const signedFormat = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 2,
     signDisplay: "always",
   });
   const instant = (value: string) => new Date(`${value}T00:00:00Z`);
-  const day = (value: string) => (isDay(value) ? dayFormat.format(instant(value)) : value);
+  const day = (value: string) => {
+    if (!isDay(value)) {
+      return value;
+    }
+    const same = Number(value.slice(0, 4)) === thisYear();
+    return (same ? monthDayFormat : dayFormat).format(instant(value));
+  };
   const number = (value: number) => numberFormat.format(value);
   return {
     day,
@@ -904,7 +938,10 @@ export function formattersFor(language: string, words: Words): Formatters {
     month: (value) => (isDay(value) ? monthFormat.format(instant(value)) : value),
     dateTime: (iso) => {
       const at = new Date(iso);
-      return Number.isNaN(at.getTime()) ? iso : dateTimeFormat.format(at);
+      if (Number.isNaN(at.getTime())) {
+        return iso;
+      }
+      return (at.getFullYear() === thisYear() ? dateTimeFormat : dateTimeYearFormat).format(at);
     },
     number,
     signed: (value) => signedFormat.format(value),
@@ -912,7 +949,10 @@ export function formattersFor(language: string, words: Words): Formatters {
   };
 }
 
-/** A span of leave as people read one: one day, with its part where there is one, or first to last. */
+/**
+ * A span of leave as people read one: one day, with its part where there is one, or first to last,
+ * each day with its year only where it is not this one.
+ */
 export function spanText(
   from: string,
   to: string,
