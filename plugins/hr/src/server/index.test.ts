@@ -3247,6 +3247,33 @@ describe("the upgrade of the rule of cancelling", () => {
       code: "hr_only",
     });
   });
+
+  // A deployment whose upgrade failed is loaded all the same: the code reads the kinds of before.
+  it("reads a kind the upgrade did not reach with the rule the setting meant, and writes it at the kind's next change", async () => {
+    const ctx = await korea(board(), { line: "[]" });
+    const monday = await writtenLeave(ctx, "2026-11-09");
+    for (const record of ctx.all("types")) {
+      await ctx.records(oldTypes).update(record.id, {});
+    }
+    const configId = ctx.all("config")[0]?.id ?? "";
+    await ctx.records(oldConfig).update(configId, { cancellation: "approval" });
+    expect(ctx.all("types").every((record) => !("cancel" in record.data))).toBe(true);
+    const asked = { deadline: { mode: "none", days: 0, time: "18:00" }, within: "decision" };
+    const listed = (await typesQuery.run(ctx.as(ALICE), {})) as TypeView[];
+    expect(listed.length).toBeGreaterThan(0);
+    for (const kind of listed) {
+      expect(kind.cancel).toMatchObject({ ...asked, after: "decision" });
+    }
+    // The request form's preview and a request's own view read the kind too.
+    await expect(
+      preview.run(ctx.as(ALICE), { from: "2026-11-16", to: "2026-11-16" }),
+    ).resolves.toBeDefined();
+    expect((await viewAs(ctx, ALICE, monday)).cancellation).toBe("decision");
+    // HR changes one thing of the kind, and the rule it stood on is written with it.
+    await type.run(ctx, { key: "annual", late: "refuse" });
+    const annual = ctx.all("types").find((record) => record.data.key === "annual")?.data;
+    expect(annual).toMatchObject({ late: "refuse", cancel: { ...asked, after: "decision" } });
+  });
 });
 
 describe("one's own requests, through the api", () => {

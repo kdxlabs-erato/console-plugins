@@ -11,8 +11,9 @@ import {
   type TeamBrief,
 } from "../shared/contracts.js";
 import { dayIn, timeIn } from "../shared/days.js";
-import { holidays, people, policies, types } from "./collections.js";
+import { config, holidays, people, policies, types } from "./collections.js";
 import type { Staff } from "./leave/approval.js";
+import { cancelRuleOf } from "./leave/types.js";
 
 const PAGE = 200;
 /** How many pages one read walks at most: 100,000 records, the plugin's whole quota. */
@@ -131,16 +132,40 @@ export async function policyFor(
   return page.items[0] ?? null;
 }
 
+/**
+ * The kinds as the code reads them. One kept before each kind had its own rule of cancelling (data
+ * version 2) is read with the rule the configuration held then, as the upgrade to 3 writes it: a
+ * deployment whose upgrade did not run is loaded all the same, and a kind without the rule would
+ * fail everything that reads it. What changes such a kind writes the rule with it.
+ */
+async function withCancelRules(
+  ctx: PluginContext,
+  found: readonly PluginRecord<LeaveType>[],
+): Promise<PluginRecord<LeaveType>[]> {
+  const lacks = (record: PluginRecord<LeaveType>) =>
+    (record.data as Partial<LeaveType>).cancel === undefined;
+  if (!found.some(lacks)) {
+    return [...found];
+  }
+  const stored = (await ctx.records(config).list({ limit: 1 })).items[0]?.data;
+  const legacy = (stored as { cancellation?: unknown } | undefined)?.cancellation;
+  return found.map((record) =>
+    lacks(record)
+      ? { ...record, data: { ...record.data, cancel: cancelRuleOf(legacy, record.data.notice) } }
+      : record,
+  );
+}
+
 export async function typeByKey(
   ctx: PluginContext,
   key: string,
 ): Promise<PluginRecord<LeaveType> | null> {
   const page = await ctx.records(types).list({ where: { key }, limit: 1 });
-  return page.items[0] ?? null;
+  return (await withCancelRules(ctx, page.items))[0] ?? null;
 }
 
 export async function allTypes(ctx: PluginContext): Promise<PluginRecord<LeaveType>[]> {
-  const all = await listAll<LeaveType>(ctx.records(types));
+  const all = await withCancelRules(ctx, await listAll<LeaveType>(ctx.records(types)));
   return all.sort((a, b) => a.data.order - b.data.order || (a.data.key < b.data.key ? -1 : 1));
 }
 

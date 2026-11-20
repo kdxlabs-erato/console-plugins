@@ -38,8 +38,6 @@ Each becomes a directory under `plugins/`, in this order. A plugin is a whole ar
 
 Decided with the person before they are built; none blocks the first version.
 
-- Reading a record of the data version before, as the skill `building-a-plugin` asks from console 0.5.0: a kind of data version 2 has no rule of cancelling, which the code reads in some forty places. A console from 0.5.0 runs the upgrade that writes it; a deployment where that upgrade failed is told by `console plugins`, and the code should still read the kind with the rule the configuration held.
-
 - Leave in units smaller than a quarter day (Korea's rule from 2027-06-10 lets a worker take leave by the hour, up to five days a year under the draft decree) and hours for part-time schedules: hours on the request, as a unit beside quarters.
 - Attendance's rate of 80%, which decides the year's 15 days in Korea: known once attendance is a feature; until then HR adjusts.
 - Sick leave accrued by hours worked, as US state laws have it: the same dependency on attendance.

@@ -26,6 +26,28 @@ export function cancelRuleOfKind(kind: LeaveType | null | undefined): CancelRule
   return kind?.cancel ?? { deadline: NO_NOTICE, within: "hr", days: 0, after: "hr" };
 }
 
+/**
+ * The rule a kind keeps of the configuration's one rule of cancelling, which held for every kind
+ * until 0.3.0, meaning the same: `free`, at once before the first day and HR's from it; `approval`,
+ * a decision; `hr`, HR's alone. The one change is meant: leave whose first day has gone by is HR's
+ * alone under every rule, where `approval` asked a decision for it too.
+ */
+export function cancelRuleOf(cancellation: unknown, notice: Notice): CancelRule {
+  switch (cancellation) {
+    case "approval":
+      return { deadline: notice, within: "decision", days: 0, after: "decision" };
+    case "hr":
+      return { deadline: notice, within: "hr", days: 0, after: "hr" };
+    default:
+      return {
+        deadline: { mode: "dayBefore", days: 0, time: "23:59" },
+        within: "now",
+        days: 0,
+        after: "hr",
+      };
+  }
+}
+
 /** What a kind asks unless HR says otherwise: no notice, late requests marked, a decision always. */
 export const TYPE_RULES = {
   notice: NO_NOTICE,
