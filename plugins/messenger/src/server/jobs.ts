@@ -2,8 +2,8 @@
 // the configuration token renewed before it expires, the app's manifest written where it differs,
 // each workspace checked that it still has the app, and the people of a workspace installed since
 // matched the first time; every day the people matched again in every workspace, so that a new
-// member, a left one or a changed account is caught where no event said so; and every hour the
-// message of the day sent to each person who chose one, once their time has come.
+// member, a left one or a changed account is caught where no event said so; and every five
+// minutes the message of the day sent to each person who chose one, once their time has come.
 import type { JobDefinition, PluginContext } from "@skillcdn/console/plugin";
 import { keepConnection } from "./connection.js";
 import { matchEveryone } from "./matching.js";

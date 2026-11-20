@@ -460,6 +460,27 @@ describe("the message of the day", () => {
       `Park Hana moved WEB-12 Ship the &lt;page&gt; to Done. (<${WEB}/12|콘솔에서 열기>)`,
     ]);
   });
+
+  it("runs every five minutes, the least a job may, sends at the first run past the minute, and writes nothing before", async () => {
+    expect(day.every).toBe("PT5M");
+    let at = NOW;
+    const minutes = (count: number) => new Date(NOW.getTime() + count * 60_000);
+    const { hook, slack, ctx } = await ready({ now: () => at });
+    // Chosen at 10:00 in Seoul for 11:30.
+    await notify.run(ctx, { cadence: "daily", at: "11:30" });
+    await onOwnWork(hook, event("task.created", { number: 12 }));
+    const kept = () => JSON.stringify([ctx.all("preferences"), ctx.all("waiting")]);
+    const before = kept();
+    const calls = slack.calls.length;
+    at = minutes(89); // 11:29
+    await day.run(hook);
+    expect(slack.calls).toHaveLength(calls);
+    expect(kept()).toBe(before);
+    at = minutes(91); // 11:31
+    await day.run(hook);
+    expect(toWhom(slack).at(-1)).toBe("U0MINSU01");
+    expect(ctx.all("preferences")[0]?.data.sentOn).toBe("2026-11-09");
+  });
 });
 
 describe("the day due", () => {

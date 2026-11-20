@@ -1056,7 +1056,9 @@ export function dayBlocks(
  * The day's message of each person who chose one, once their time has come and once for that day,
  * whether or not anything waited then: what was kept since, a thing at a time, twenty at most and
  * the rest as a count, so that a line kept after the day's time waits for the next. The lines of
- * someone who since chose to be told at once are sent at the next run.
+ * someone who since chose to be told at once are sent at the next run. The job runs every five
+ * minutes, and most runs end having read who chose a day's message and what waits, and written
+ * nothing: nobody's time has come, and nothing waits for someone told at once.
  */
 async function sendDays(ctx: PluginContext): Promise<void> {
   const connected = await connectionsOf(ctx);
@@ -1127,8 +1129,12 @@ async function sendDays(ctx: PluginContext): Promise<void> {
 }
 
 export const day: JobDefinition = {
-  about: "Sends each person who chose one their message of the day, at their time.",
-  every: "PT1H",
+  about:
+    "Sends each person who chose one their message of the day, within five minutes of their time.",
+  // The least a job may run at. A person's time is to the minute, and a job with no `at` is not
+  // held to the clock: its runs fall wherever the first one did, so that an hourly one sent a
+  // message chosen for 09:00 at 09:47.
+  every: "PT5M",
   async run(ctx) {
     await sendDays(ctx);
   },
