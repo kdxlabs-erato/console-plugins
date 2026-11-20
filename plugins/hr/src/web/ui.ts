@@ -1054,9 +1054,18 @@ export function stack(): HTMLDivElement {
   return el("div", "stack");
 }
 
-/** The console's quiet row of filters: the words first, the choices after them. */
+/**
+ * The console's quiet row of filters: the words first, the choices after them. A field among them
+ * is the part's own field for words, which takes the room the row has up to a point and, in the
+ * row that scrolls on a phone, keeps its width where a rule of the plugin's let it shrink to nothing.
+ */
 export function toolbar(...children: HTMLElement[]): HTMLDivElement {
   const node = el("div", "sc-filters toolbar");
+  for (const child of children) {
+    if (child instanceof HTMLInputElement) {
+      child.classList.add("sc-filters-words");
+    }
+  }
   node.append(...children);
   return node;
 }
