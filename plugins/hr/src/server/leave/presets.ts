@@ -151,7 +151,7 @@ export const PRESETS: readonly PresetView[] = [
     name: { en: "By hand", ko: "수동" },
     about: {
       en: "Nothing is given by the plugin: HR adjusts each person's balance, with the expiry each credit carries, and a task reminds HR at every period start. For organizations whose rules fit no preset, or who keep the count elsewhere.",
-      ko: "플러그인이 주는 것이 없음: 인사 담당이 잔여 조정으로 각자의 일수를 만료일과 함께 넣고, 매 기간 시작마다 태스크로 알림을 받습니다. 어느 프리셋에도 맞지 않거나 일수를 다른 곳에서 세는 조직용.",
+      ko: "플러그인이 주는 것이 없음: 인사 담당이 잔여 조정으로 각자의 일수를 만료일과 함께 넣고, 매 기간 시작마다 작업으로 알림을 받습니다. 어느 프리셋에도 맞지 않거나 일수를 다른 곳에서 세는 조직용.",
     },
     policy: {
       ...base,
