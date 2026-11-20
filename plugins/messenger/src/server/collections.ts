@@ -221,15 +221,41 @@ export const preferences = defineCollection("preferences", {
   history: false,
 });
 
+/**
+ * What happened to one thing, in parts no language is in: the words are put to it when it is told,
+ * and a day's message puts everything that happened to one thing together by it.
+ */
+const happened = z.object({
+  /** The thing where it is a task, as `KEY-12`; none for a decision or an agent account. */
+  ref: z.string().max(80).nullable(),
+  /** The task's title, the decision's question, the agent account's name. */
+  title: z.string().max(200),
+  /** Who did it, by name; none where the console names nobody. */
+  actor: z.string().max(200).nullable(),
+  /** The states of a move, or how an agent account stood and stands. */
+  from: z.string().max(40).nullable(),
+  to: z.string().max(40).nullable(),
+  /** What a change changed of the task. */
+  fields: z.array(z.string().max(40)).max(8),
+  /** A comment's words, or what an agent account's state says of itself. */
+  excerpt: z.string().max(200),
+});
+
 /** A line of a person's message of the day, kept until it is sent; forgotten after a few days. */
 export const waiting = defineCollection("waiting", {
   schema: z.object({
     personId: id,
     kind: z.enum(NOTICE_KINDS),
-    /** The line as it is said, in the person's language, and where it leads on the console. */
+    /** The line in one sentence, in the person's language, and where it leads on the console. */
     text: z.string().min(1).max(600),
     url: z.string().max(1000).nullable(),
     at: instant,
+    /**
+     * The same in parts. A line kept by 0.4 has none and is sent as its sentence: the field is
+     * optional so that the lines waiting when a deployment moves are read as they are, and they
+     * are gone within the three days a line is kept, so no upgrade writes it.
+     */
+    what: happened.optional(),
   }),
   indexes: ["personId", "at"],
   owner: "personId",
@@ -260,3 +286,4 @@ export type DeliveryData = z.infer<typeof deliveries.schema>;
 export type InstallData = z.infer<typeof install>;
 export type PreferenceData = z.infer<typeof preferences.schema>;
 export type WaitingData = z.infer<typeof waiting.schema>;
+export type HappenedData = z.infer<typeof happened>;

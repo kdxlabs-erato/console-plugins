@@ -2,11 +2,13 @@
 // projects the messenger is placed on, a task given to them, one they own moved, one of theirs
 // changed, commented or put away, a decision waiting on them, and to a manager their agent
 // accounts stopping or running again; each told to the person it is about, never whoever made the
-// change, in their language, with who changed it and where it is on the console. In a direct
-// message, in the workspace the project is told in where they have an account there, else the
-// default, else another they have one in (ADR-0014); at once, or in one message a day at a time
-// of the workspace's zone. Chosen on a page of the messenger's and through their agent, with the
-// command `notify` and the query `notices`; each message has a button that turns its kind off.
+// change, in their language. A message says what happened first, in a few words, then the thing,
+// its name the link to it on the console, then who did it; a day's message says each thing once,
+// with everything that happened to it, what waits on the person first. In a direct message, in the
+// workspace the project is told in where they have an account there, else the default, else
+// another they have one in (ADR-0014); at once, or in one message a day at a time of the
+// workspace's zone. Chosen on a page of the messenger's and through their agent, with the command
+// `notify` and the query `notices`; each message at once has a button that turns its kind off.
 import {
   arg,
   defineCommand,
@@ -29,7 +31,13 @@ import {
   type ProjectNoticesView,
 } from "../shared/contracts.js";
 import { MEMBER, ROLE } from "./access.js";
-import { type PreferenceData, preferences, type WaitingData, waiting } from "./collections.js";
+import {
+  type HappenedData,
+  type PreferenceData,
+  preferences,
+  type WaitingData,
+  waiting,
+} from "./collections.js";
 import { HR } from "./integrations/hr/contract.js";
 import { languageOfPerson } from "./people.js";
 import { bot, SlackError, slack, textOf } from "./slack/api.js";
@@ -57,10 +65,16 @@ import { serverWords } from "./words.js";
 /** The press of a message's button that turns its kind off. */
 export const NOTICE_OFF = "notice-off";
 
-/** The lines of a day's message, at most; the rest said as a count. */
-const DAY_LINES_AT_MOST = 30;
-/** What a comment's excerpt or a decision's question is held to in a line. */
+/** The things of a day's message, at most; the rest said as a count. */
+const DAY_THINGS_AT_MOST = 20;
+/** What a comment's excerpt or a decision's question is held to. */
 const EXCERPT_AT_MOST = 200;
+/** A thing's comments quoted in a day's message, the last ones, and what each is held to there. */
+const DAY_QUOTES = { count: 2, each: 140 } as const;
+/** The states a thing's moves are written out to; a longer way is its first and its last. */
+const STATES_AT_MOST = 4;
+/** The state a task waits in for a person's look at what was done. */
+const IN_REVIEW = "in_review";
 
 type PreferenceRecord = PluginRecord<PreferenceData>;
 
@@ -386,26 +400,164 @@ interface Who {
   readonly name?: string | null | undefined;
 }
 
-function nameOf(person: Who | null | undefined, language: Language): string {
+/** Who did it, by name; none where the console names nobody, as for a run it gave up on itself. */
+function nameOf(person: Who | null | undefined): string | null {
   if (person === null || person === undefined) {
-    return serverWords(language).thread.someone;
+    return null;
   }
   const name = person.name?.trim();
   return clean(name !== undefined && name.length > 0 ? name : (person.login ?? person.id), 200);
 }
 
-/** One thing to tell one person: the kind it is, and its words in their language. */
+/** What happened to one thing, in parts no language is in, as the collection `waiting` keeps it. */
+export type Happened = HappenedData;
+
+/** One thing to tell one person: the kind it is, what happened, and where it leads on the console. */
 interface Notice {
   readonly personId: string;
   readonly kind: NoticeKind;
   readonly projectId: string | null;
-  /** The line, in the person's language, and where it leads on the console. */
-  readonly say: (language: Language) => { readonly text: string; readonly url: string | null };
+  readonly url: string | null;
+  readonly what: Happened;
 }
 
-/** The console's word for a task: its project's key and number, and its title. */
-function taskRef(projectKey: string, number: number, title: string): string {
-  return `${projectKey}-${number} ${clean(title, 200)}`;
+/** One of the things that happened to a thing: its kind and its parts. */
+interface Line {
+  readonly kind: NoticeKind;
+  readonly what: Happened;
+}
+
+/** A thing and what happened to it: one message at once, or one entry of a day's message. */
+interface Entry {
+  readonly url: string | null;
+  readonly lines: readonly Line[];
+}
+
+type NoticeWords = ReturnType<typeof serverWords>["notice"];
+
+/** A happening with nothing in it, for each kind to fill what it has. */
+const NOTHING: Omit<Happened, "title"> = {
+  ref: null,
+  actor: null,
+  from: null,
+  to: null,
+  fields: [],
+  excerpt: "",
+};
+
+/**
+ * The states a thing went through, as `Ready → In review`: where it stood before the first move,
+ * then each state it came to, one it came to twice running said once; `→ Done` where the console
+ * did not say where it stood.
+ */
+function wayOf(words: NoticeWords, moves: readonly Happened[]): string {
+  const name = (state: string) => words.states[state] ?? state;
+  const from = moves[0]?.from ?? null;
+  const all = [
+    ...(from === null ? [] : [from]),
+    ...moves.flatMap((move) => (move.to === null ? [] : [move.to])),
+  ].filter((state, index, states) => index === 0 || state !== states[index - 1]);
+  const first = all[0];
+  const last = all.at(-1);
+  if (first === undefined || last === undefined) {
+    return "→";
+  }
+  if (all.length === 1) {
+    return `→ ${name(first)}`;
+  }
+  return all.length > STATES_AT_MOST
+    ? `${name(first)} → … → ${name(last)}`
+    : all.map(name).join(" → ");
+}
+
+/**
+ * What happened to a thing, each in a few words and each said once, however often it happened:
+ * a decision waiting; how an agent account stands now; given to the person, the way its moves
+ * went, what changed of it, how many comments, put away.
+ */
+function factsOf(words: NoticeWords, lines: readonly Line[]): string[] {
+  const of = (kind: NoticeKind) =>
+    lines.filter((line) => line.kind === kind).map((line) => line.what);
+  const facts: string[] = [];
+  if (of("decisions").length > 0) {
+    facts.push(words.facts.decision);
+  }
+  const stands = of("agents").at(-1)?.to ?? null;
+  if (stands !== null) {
+    facts.push(words.facts.agent(words.agentStates[stands] ?? stands));
+  }
+  if (of("assigned").length > 0) {
+    facts.push(words.facts.assigned);
+  }
+  const moves = of("moved");
+  if (moves.length > 0) {
+    facts.push(wayOf(words, moves));
+  }
+  const fields = [...new Set(of("changed").flatMap((what) => what.fields))];
+  if (fields.length > 0) {
+    facts.push(words.facts.changed(fields.map((field) => words.fields[field] ?? field).join(", ")));
+  }
+  const comments = of("commented").length;
+  if (comments > 0) {
+    facts.push(comments === 1 ? words.facts.commented : words.facts.comments(String(comments)));
+  }
+  if (of("archived").length > 0) {
+    facts.push(words.facts.archived);
+  }
+  return facts;
+}
+
+/** Who did what happened to a thing: one or two by name, more as the first and a count. */
+function whoOf(words: NoticeWords, lines: readonly Line[]): string {
+  const names = [
+    ...new Set(lines.flatMap((line) => (line.what.actor === null ? [] : [line.what.actor]))),
+  ];
+  const [first] = names;
+  if (first === undefined) {
+    return "";
+  }
+  return names.length <= 2 ? names.join(", ") : words.others(first, String(names.length - 1));
+}
+
+/** A thing's name: a task's key and number before its title. */
+function labelOf(what: Happened): string {
+  return what.ref === null ? what.title : `${what.ref} ${what.title}`;
+}
+
+/**
+ * A thing as Slack's markup, to be read at a glance: what happened in bold, and who did it; under
+ * it the thing, its name the link to it on the console; under that what was said, a comment's
+ * words or an agent account's own, quoted, the last few of them.
+ */
+function entryMarkup(
+  language: Language,
+  entry: Entry,
+  quotes: { readonly count: number; readonly each: number },
+): string {
+  const words = serverWords(language).notice;
+  const who = whoOf(words, entry.lines);
+  const facts = safe(factsOf(words, entry.lines).join(" · "));
+  const last = entry.lines.at(-1)?.what;
+  const label = last === undefined ? "" : labelOf(last);
+  const said = entry.lines
+    .map((line) => line.what.excerpt)
+    .filter((excerpt) => excerpt.length > 0)
+    .slice(-quotes.count)
+    .map((excerpt) => `> ${safe(clean(excerpt, quotes.each))}`);
+  return [
+    who.length === 0 ? `*${facts}*` : `*${facts}* · ${safe(who)}`,
+    entry.url === null ? safe(label) : link(entry.url, label),
+    ...said,
+  ].join("\n");
+}
+
+/** The same in one sentence, for where blocks are not read: a notification, and a line kept. */
+function sentenceOf(language: Language, line: Line): string {
+  const words = serverWords(language).notice;
+  const who = whoOf(words, [line]);
+  const facts = factsOf(words, [line]).join(" · ");
+  const said = line.what.excerpt.length === 0 ? "" : ` — ${line.what.excerpt}`;
+  return `${facts}${who.length === 0 ? "" : ` · ${who}`}: ${labelOf(line.what)}${said}`;
 }
 
 /** What the console's task and decision events come to, to whom. */
@@ -431,29 +583,31 @@ async function noticesOfBoard(
     if (task === null) {
       return [];
     }
-    const ref = taskRef(project.key, task.number, task.title);
     const url = origin === null ? null : `${origin}/projects/${project.key}/tasks/${task.number}`;
     const owner = task.owner.id;
     const workers = task.workers.map((worker) => worker.id);
     const everyone = [...new Set([owner, ...workers])];
+    const about: Happened = {
+      ...NOTHING,
+      ref: clean(`${project.key}-${task.number}`, 80),
+      title: clean(task.title, 200),
+      actor: nameOf(actor),
+    };
     const make = (
       personId: string,
       noticeKind: NoticeKind,
-      line: (language: Language) => string,
+      more: Partial<Happened> = {},
     ): Notice => ({
       personId,
       kind: noticeKind,
       projectId,
-      say: (language) => ({ text: line(language), url }),
+      url,
+      what: { ...about, ...more },
     });
-    const words = (language: Language) => serverWords(language).notice;
+    const state = (value: unknown) => (typeof value === "string" ? clean(value, 40) : null);
     switch (kind) {
       case "task.created":
-        return everyone.map((personId) =>
-          make(personId, "assigned", (language) =>
-            words(language).assigned(nameOf(actor, language), ref),
-          ),
-        );
+        return everyone.map((personId) => make(personId, "assigned"));
       case "task.updated": {
         const added = Array.isArray(data.workersAdded)
           ? (data.workersAdded as unknown[]).filter((id): id is string => typeof id === "string")
@@ -463,49 +617,28 @@ async function noticesOfBoard(
           : [];
         const what = fields.filter((field) => CHANGED.includes(field));
         return [
-          ...added.map((personId) =>
-            make(personId, "assigned", (language) =>
-              words(language).assigned(nameOf(actor, language), ref),
-            ),
-          ),
+          ...added.map((personId) => make(personId, "assigned")),
           ...(what.length === 0
             ? []
             : everyone
                 .filter((personId) => !added.includes(personId))
-                .map((personId) =>
-                  make(personId, "changed", (language) =>
-                    words(language).changed(
-                      nameOf(actor, language),
-                      ref,
-                      what.map((field) => words(language).fields[field] ?? field).join(", "),
-                    ),
-                  ),
-                )),
+                .map((personId) => make(personId, "changed", { fields: what }))),
         ];
       }
-      case "task.moved": {
-        const to = typeof data.to === "string" ? data.to : task.state;
+      case "task.moved":
         return [
-          make(owner, "moved", (language) =>
-            words(language).moved(nameOf(actor, language), ref, words(language).states[to] ?? to),
-          ),
+          make(owner, "moved", {
+            from: state(data.from),
+            to: state(data.to) ?? clean(task.state, 40),
+          }),
         ];
-      }
       case "task.commented": {
         const excerpt =
           typeof data.excerpt === "string" ? clean(data.excerpt, EXCERPT_AT_MOST) : "";
-        return everyone.map((personId) =>
-          make(personId, "commented", (language) =>
-            words(language).commented(nameOf(actor, language), ref, excerpt),
-          ),
-        );
+        return everyone.map((personId) => make(personId, "commented", { excerpt }));
       }
       case "task.archived":
-        return everyone.map((personId) =>
-          make(personId, "archived", (language) =>
-            words(language).archived(nameOf(actor, language), ref),
-          ),
-        );
+        return everyone.map((personId) => make(personId, "archived"));
       default:
         return [];
     }
@@ -535,10 +668,8 @@ async function noticesOfBoard(
       personId,
       kind: "decisions",
       projectId,
-      say: (language) => ({
-        text: serverWords(language).notice.decision(nameOf(actor, language), question),
-        url,
-      }),
+      url,
+      what: { ...NOTHING, title: question, actor: nameOf(actor) },
     }));
   }
   return [];
@@ -576,36 +707,33 @@ async function noticesOfAgent(ctx: PluginContext, event: PluginHookEvent): Promi
       personId: managerId,
       kind: "agents",
       projectId: null,
-      say: (language) => ({
-        text: serverWords(language).notice.agent(
-          clean(handle ?? account.name ?? account.login, 200),
-          serverWords(language).notice.agentStates[state] ?? state,
-          detail,
-        ),
-        url: null,
-      }),
+      url: null,
+      what: {
+        ...NOTHING,
+        title: clean(handle ?? account.name ?? account.login, 200),
+        from: was === null ? null : clean(was, 40),
+        to: clean(state, 40),
+        excerpt: detail,
+      },
     },
   ];
 }
 
-/** The message of one notice: its line, where it leads, and the buttons that turn its kind off and choose. */
-function noticeBlocks(
-  language: Language,
-  kind: NoticeKind,
-  line: { readonly text: string; readonly url: string | null },
-  origin: string | null,
-): Block[] {
+/** The message of one notice: what happened to the thing, the page that chooses, and the button that turns its kind off. */
+function noticeBlocks(language: Language, notice: Notice, origin: string | null): Block[] {
   const words = serverWords(language).notice;
-  const blocks: Block[] = [section(safe(line.text))];
-  const notes: string[] = [];
-  if (line.url !== null) {
-    notes.push(link(line.url, words.open));
-  }
+  const kind = notice.kind;
+  const blocks: Block[] = [
+    section(
+      entryMarkup(
+        language,
+        { url: notice.url, lines: [notice] },
+        { count: 1, each: EXCERPT_AT_MOST },
+      ),
+    ),
+  ];
   if (origin !== null) {
-    notes.push(link(`${origin}/plugins/messenger/notifications`, words.choose));
-  }
-  if (notes.length > 0) {
-    blocks.push(context(...notes));
+    blocks.push(context(link(`${origin}/plugins/messenger/notifications`, words.choose)));
   }
   blocks.push({
     type: "actions",
@@ -690,25 +818,21 @@ async function tellAll(
       continue;
     }
     const language = await languageOfPerson(ctx, notice.personId, fallbackLanguage);
-    const line = notice.say(language);
+    const sentence = sentenceOf(language, notice);
     if (choice.cadence === "daily") {
       await ctx.records(waiting).create(
         {
           personId: notice.personId,
           kind: notice.kind,
-          text: [...line.text].slice(0, 600).join(""),
-          url: line.url,
+          text: [...sentence].slice(0, 600).join(""),
+          url: notice.url,
           at: ctx.now().toISOString(),
+          what: notice.what,
         },
         { owner: notice.personId },
       );
     } else {
-      await directly(
-        ctx,
-        account,
-        fallback(line.text),
-        noticeBlocks(language, notice.kind, line, origin),
-      );
+      await directly(ctx, account, fallback(sentence), noticeBlocks(language, notice, origin));
     }
     told.push(once);
   }
@@ -828,11 +952,111 @@ export function dueDay(now: Date, timeZone: string, at: string): string {
   return clock.time >= at ? clock.day : clockIn(new Date(now.getTime() - 86_400_000), timeZone).day;
 }
 
+/** Every record a query finds, a page at a time. */
+async function everyOne<T>(
+  list: (after: string | undefined) => Promise<{
+    readonly items: readonly PluginRecord<T>[];
+    readonly after?: string | null;
+  }>,
+): Promise<PluginRecord<T>[]> {
+  const all: PluginRecord<T>[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < 50; page += 1) {
+    const read = await list(after);
+    all.push(...read.items);
+    after = read.after ?? undefined;
+    if (after === undefined || read.items.length === 0) {
+      break;
+    }
+  }
+  return all;
+}
+
+/**
+ * What stands first in a day's message: a decision waiting, an agent account that stands
+ * otherwise, a task given to the person or put up for their look, then everything else.
+ */
+function rankOf(entry: Entry): number {
+  const kinds = new Set(entry.lines.map((line) => line.kind));
+  if (kinds.has("decisions")) {
+    return 0;
+  }
+  if (kinds.has("agents")) {
+    return 1;
+  }
+  const stands = entry.lines.findLast((line) => line.kind === "moved")?.what.to ?? null;
+  return kinds.has("assigned") || stands === IN_REVIEW ? 2 : 3;
+}
+
+/**
+ * A day's lines as the things they are about, each thing once with everything that happened to
+ * it: a task by its key and number, a decision by its address, an agent account by its name. What
+ * waits on the person stands first, and within that what happened last. A line kept by 0.4, which
+ * has its sentence alone, is a thing of its own, said as it was.
+ */
+export function dayBlocks(
+  language: Language,
+  kept: readonly PluginRecord<WaitingData>[],
+  origin: string | null,
+): { readonly blocks: Block[]; readonly title: string } {
+  const words = serverWords(language).notice;
+  const things = new Map<
+    string,
+    { url: string | null; lines: Line[]; at: string; said: string | null }
+  >();
+  for (const record of kept) {
+    const { kind, what, url, at, text } = record.data;
+    const key =
+      what === undefined
+        ? `line:${record.id}`
+        : what.ref !== null
+          ? `task:${what.ref}`
+          : `${kind}:${kind === "decisions" ? (url ?? what.title) : what.title}`;
+    const thing = things.get(key) ?? { url, lines: [], at, said: null };
+    if (what === undefined) {
+      thing.said = text;
+    } else {
+      thing.lines.push({ kind, what });
+    }
+    thing.url = url ?? thing.url;
+    // The lines come in the order they were kept: the one read last is the thing's latest.
+    thing.at = at;
+    things.set(key, thing);
+  }
+  const ordered = [...things.values()].sort(
+    (a, b) =>
+      (a.said === null ? rankOf(a) : 3) - (b.said === null ? rankOf(b) : 3) ||
+      (a.at < b.at ? 1 : a.at > b.at ? -1 : 0),
+  );
+  const shown = ordered.slice(0, DAY_THINGS_AT_MOST);
+  const more = ordered.length - shown.length;
+  const title = words.dayTitle(String(ordered.length));
+  return {
+    title,
+    blocks: [
+      section(`*${safe(title)}*`),
+      ...shown.map((thing) =>
+        section(
+          thing.said === null
+            ? entryMarkup(language, thing, DAY_QUOTES)
+            : thing.url === null
+              ? safe(thing.said)
+              : `${safe(thing.said)} (${link(thing.url, words.open)})`,
+        ),
+      ),
+      ...(more > 0 ? [context(words.more(String(more)))] : []),
+      ...(origin === null
+        ? []
+        : [context(link(`${origin}/plugins/messenger/notifications`, words.choose))]),
+    ],
+  };
+}
+
 /**
  * The day's message of each person who chose one, once their time has come and once for that day,
- * whether or not anything waited then: the lines kept since, thirty at most and the rest as a
- * count, so that a line kept after the day's time waits for the next. The lines of someone who
- * since chose to be told at once are sent at the next run.
+ * whether or not anything waited then: what was kept since, a thing at a time, twenty at most and
+ * the rest as a count, so that a line kept after the day's time waits for the next. The lines of
+ * someone who since chose to be told at once are sent at the next run.
  */
 async function sendDays(ctx: PluginContext): Promise<void> {
   const connected = await connectionsOf(ctx);
@@ -841,68 +1065,50 @@ async function sendDays(ctx: PluginContext): Promise<void> {
   }
   const workspace = await ctx.console.workspace();
   const now = ctx.now();
-  // A day passed for whoever chose a day's message and had nothing waiting: the next line waits.
-  const daily = await ctx.records(preferences).list({ where: { cadence: "daily" }, limit: 200 });
-  const marked = new Set<string>();
-  for (const record of daily.items) {
-    const due = dueDay(now, workspace.timeZone, record.data.at);
-    if ((record.data.sentOn ?? "") < due) {
-      marked.add(record.data.personId);
-    }
-  }
+  const dueOf = (at: string) => dueDay(now, workspace.timeZone, at);
+  const daily = new Map(
+    (
+      await everyOne<PreferenceData>((after) =>
+        ctx.records(preferences).list({
+          where: { cadence: "daily" },
+          limit: 200,
+          ...(after === undefined ? {} : { after }),
+        }),
+      )
+    ).map((record) => [record.data.personId, record]),
+  );
+  /** Whether a person's message is due: their day's time has come unsent, or they are told at once. */
+  const due = (personId: string) => {
+    const choice = daily.get(personId)?.data;
+    return choice === undefined || (choice.sentOn ?? "") < dueOf(choice.at);
+  };
   const lines = new Map<string, PluginRecord<WaitingData>[]>();
-  let after: string | undefined;
-  for (let page = 0; page < 50; page += 1) {
-    const read = await ctx.records(waiting).list({
+  for (const record of await everyOne<WaitingData>((after) =>
+    ctx.records(waiting).list({
       order: { field: "at" },
       limit: 200,
       ...(after === undefined ? {} : { after }),
-    });
-    for (const record of read.items) {
-      lines.set(record.data.personId, [...(lines.get(record.data.personId) ?? []), record]);
-    }
-    after = read.after ?? undefined;
-    if (after === undefined) {
-      break;
+    }),
+  )) {
+    lines.set(record.data.personId, [...(lines.get(record.data.personId) ?? []), record]);
+  }
+  // A day passed for whoever chose a day's message and had nothing waiting: the next line waits.
+  for (const [personId, record] of daily) {
+    if (due(personId) && !lines.has(personId)) {
+      await ctx.records(preferences).update(record.id, { sentOn: dueOf(record.data.at) });
     }
   }
   const fallbackLanguage = workspace.languageSet ? languageOf(workspace.language) : "en";
-  for (const record of daily.items) {
-    if (marked.has(record.data.personId) && !lines.has(record.data.personId)) {
-      await ctx.records(preferences).update(record.id, {
-        sentOn: dueDay(now, workspace.timeZone, record.data.at),
-      });
-    }
-  }
   for (const [personId, kept] of lines) {
-    const choice = await choiceOf(ctx, personId);
-    const due =
-      choice.cadence !== "daily" ||
-      (choice.sentOn ?? "") < dueDay(now, workspace.timeZone, choice.at);
-    if (!due) {
+    if (!due(personId)) {
       continue;
     }
     const account = whereTold(connected, await accountsOf(ctx, personId), null);
     if (account !== null) {
       const language = await languageOfPerson(ctx, personId, fallbackLanguage);
-      const words = serverWords(language).notice;
-      const shown = kept
-        .slice(0, DAY_LINES_AT_MOST)
-        .map((record) =>
-          record.data.url === null
-            ? `• ${safe(record.data.text)}`
-            : `• ${safe(record.data.text)} (${link(record.data.url, words.open)})`,
-        );
-      const more = kept.length - shown.length;
-      const blocks: Block[] = [
-        section(`*${words.dayTitle(String(kept.length))}*\n${shown.join("\n")}`),
-        ...(more > 0 ? [context(words.more(String(more)))] : []),
-        ...(workspace.url === null
-          ? []
-          : [context(link(`${workspace.url}/plugins/messenger/notifications`, words.choose))]),
-      ];
+      const message = dayBlocks(language, kept, workspace.url);
       try {
-        await directly(ctx, account, fallback(words.dayTitle(String(kept.length))), blocks);
+        await directly(ctx, account, fallback(message.title), message.blocks);
       } catch (error) {
         ctx.log.warn("a day's message did not go", {
           code: error instanceof SlackError ? error.code : null,
@@ -913,8 +1119,9 @@ async function sendDays(ctx: PluginContext): Promise<void> {
     for (const record of kept) {
       await ctx.records(waiting).archive(record.id);
     }
-    if (choice.cadence === "daily") {
-      await saveChoice(ctx, personId, { sentOn: dueDay(now, workspace.timeZone, choice.at) });
+    const choice = daily.get(personId);
+    if (choice !== undefined) {
+      await ctx.records(preferences).update(choice.id, { sentOn: dueOf(choice.data.at) });
     }
   }
 }

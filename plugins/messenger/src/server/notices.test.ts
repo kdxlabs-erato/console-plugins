@@ -62,7 +62,12 @@ function event(kind: string, data: Record<string, unknown>, actor = HANA): Plugi
 }
 
 async function ready(
-  options: { readonly task?: Record<string, unknown>; readonly now?: () => Date } = {},
+  options: {
+    readonly task?: Record<string, unknown>;
+    /** What each task is, by its number, where a test tells of several. */
+    readonly tasks?: (number: number) => Record<string, unknown>;
+    readonly now?: () => Date;
+  } = {},
 ) {
   const slack = fakeSlack();
   const made = setup({
@@ -82,7 +87,10 @@ async function ready(
       },
     ],
     board: {
-      tasks: { get: async () => task(options.task) },
+      tasks: {
+        get: async (_project: string, number: number) =>
+          task(options.tasks === undefined ? options.task : { number, ...options.tasks(number) }),
+      },
       decisions: {
         get: async () => ({
           id: DECISION,
@@ -116,12 +124,18 @@ describe("a task's events", () => {
         slack.of("conversations.open").findIndex((call) => call.params.users === "U0MINSU01")
       ];
     const blocks = blocksOf(toMinsu);
-    expect(blocks).toContain("Park Hana 님이 WEB-12");
-    expect(blocks).toContain("https://console.example.test/projects/WEB/tasks/12");
+    // What happened stands first, then who did it; the thing's name is the link to it.
+    expect(blocks).toContain("*새로 맡은 작업* · Park Hana");
+    expect(blocks).toContain(
+      "<https://console.example.test/projects/WEB/tasks/12|WEB-12 Ship the &lt;!channel&gt; page>",
+    );
     expect(blocks).toContain("notice-off");
     // What a person wrote is never Slack's markup.
     expect(blocks).not.toContain("<!channel>");
-    expect(blocks).toContain("&lt;!channel&gt;");
+    // Where blocks are not read, the same in one sentence, what happened first.
+    expect(toMinsu?.params.text).toBe(
+      "새로 맡은 작업 · Park Hana: WEB-12 Ship the &lt;!channel&gt; page",
+    );
     expect(toMinsu?.secrets[0]).toEqual({ name: "slackBotToken", key: TEAM, as: "bearer" });
     expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "sent", note: "told:2" });
   });
@@ -138,7 +152,30 @@ describe("a task's events", () => {
     await onOwnWork(hook, { ...once, attempt: 2 });
     // A move is told to whoever owns the task alone.
     expect(toWhom(slack)).toEqual(["U0JIHYE01"]);
-    expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("In review");
+    expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("*Ready → In review* · Park Hana");
+  });
+
+  it("says a comment's words under the thing, and a move the console made as nobody's", async () => {
+    const { hook, slack } = await ready();
+    await onOwnWork(
+      hook,
+      event("task.commented", {
+        taskId: task().id,
+        number: 12,
+        excerpt: `Looks > good & <@U0EVERYONE> ${"long ".repeat(80)}`,
+      }),
+    );
+    const comment = blocksOf(slack.of("chat.postMessage")[0]);
+    expect(comment).toContain("*New comment* · Park Hana");
+    expect(comment).toContain("\\n> Looks &gt; good &amp; &lt;@U0EVERYONE&gt; long");
+    expect(comment).not.toContain("<@U0EVERYONE>");
+    // A run the console gave up on is moved by nobody: no name, and a state it has no word for as it is.
+    await onOwnWork(hook, {
+      ...event("task.moved", { taskId: task().id, number: 12, to: "on_hold" }),
+      data: { actor: null, agent: null, taskId: task().id, number: 12, to: "on_hold" },
+    });
+    const moved = blocksOf(slack.of("chat.postMessage").at(-1));
+    expect(moved).toContain("*→ on_hold*\\n");
   });
 
   it("tells a change only to whoever turned it on, and whom a change put to work as given the task", async () => {
@@ -154,8 +191,8 @@ describe("a task's events", () => {
       }),
     );
     const said = slack.of("chat.postMessage").map((call) => blocksOf(call));
-    expect(said.some((blocks) => blocks.includes("제목"))).toBe(true);
-    expect(said.some((blocks) => blocks.includes("Park Hana gave you WEB-12"))).toBe(true);
+    expect(said.some((blocks) => blocks.includes("*제목 변경* · Park Hana"))).toBe(true);
+    expect(said.some((blocks) => blocks.includes("*Given to you* · Park Hana"))).toBe(true);
     // Jihye, given it, is not told of the change besides; Minsu, who chose changes, is.
     expect(toWhom(slack).sort()).toEqual(["U0JIHYE01", "U0MINSU01"]);
   });
@@ -304,6 +341,124 @@ describe("the message of the day", () => {
     await day.run(hook);
     // Once a day: the next line waits for tomorrow.
     expect(toWhom(slack).filter((who) => who === "U0MINSU01")).toHaveLength(1);
+  });
+
+  /** What a day's message says, a section at a time. */
+  const sectionsOf = (call: { params: Readonly<Record<string, string>> } | undefined) =>
+    (JSON.parse(blocksOf(call)) as { type: string; text?: { text: string } }[])
+      .filter((block) => block.type === "section")
+      .map((block) => block.text?.text ?? "");
+  const WEB = "https://console.example.test/projects/WEB/tasks";
+
+  it("says each thing once with everything that happened to it, what waits on the person first", async () => {
+    let at = NOW;
+    const titles: Record<number, string> = {
+      12: "Ship the page",
+      13: "Write the guide",
+      14: "Fix the build",
+    };
+    const { hook, slack, ctx } = await ready({
+      now: () => at,
+      tasks: (number) => ({ title: titles[number], owner: brief(MINSU), workers: [] }),
+    });
+    await notify.run(ctx, { cadence: "daily", at: "11:30", on: ["changed", "archived"] });
+    const tell = async (kind: string, data: Record<string, unknown>) => {
+      at = new Date(at.getTime() + 60_000);
+      await onOwnWork(hook, event(kind, data));
+    };
+    // Task 12 as an agent works one in a day: given, taken, given again, put up for a look.
+    await tell("task.created", { number: 12 });
+    await tell("task.moved", { number: 12, from: "ready", to: "in_progress" });
+    await tell("task.updated", { number: 12, fields: ["workers"], workersAdded: [MINSU.id] });
+    await tell("task.moved", { number: 12, from: "in_progress", to: "in_review" });
+    // Task 13 commented twice and changed between; task 14 put away; a decision raised last.
+    await tell("task.commented", { number: 13, excerpt: "First thoughts" });
+    await tell("task.updated", { number: 13, fields: ["title", "dueOn"] });
+    await tell("task.commented", { number: 13, excerpt: "Second thoughts" });
+    await tell("task.archived", { number: 14 });
+    await tell("decision.raised", { decisionId: DECISION, question: "Ship it?" });
+    expect(ctx.all("waiting")).toHaveLength(9);
+    at = new Date(NOW.getTime() + 2 * 3_600_000); // 12:00 in Seoul
+    await day.run(hook);
+    const sent = slack.of("chat.postMessage").at(-1);
+    expect(sectionsOf(sent)).toEqual([
+      "*오늘의 알림 4건*",
+      `*나를 기다리는 결정* · Park Hana\n<https://console.example.test/decisions/${DECISION}|Ship it?>`,
+      `*새로 맡은 작업 · 준비 → 진행 중 → 검토 중* · Park Hana\n<${WEB}/12|WEB-12 Ship the page>`,
+      `*보관된 작업* · Park Hana\n<${WEB}/14|WEB-14 Fix the build>`,
+      `*제목, 마감일 변경 · 새 댓글 2건* · Park Hana\n<${WEB}/13|WEB-13 Write the guide>\n> First thoughts\n> Second thoughts`,
+    ]);
+    expect(sent?.params.text).toBe("오늘의 알림 4건");
+    expect(ctx.all("waiting").every((record) => record.archivedAt !== null)).toBe(true);
+  });
+
+  it("counts what is past twenty things, and cuts no thing short", async () => {
+    let at = NOW;
+    const { hook, slack, ctx } = await ready({
+      now: () => at,
+      tasks: () => ({ title: "긴 제목 ".repeat(60), owner: brief(MINSU), workers: [] }),
+    });
+    await notify.run(ctx, { cadence: "daily", at: "11:30" });
+    for (let number = 1; number <= 23; number += 1) {
+      at = new Date(at.getTime() + 1000);
+      await onOwnWork(hook, event("task.commented", { number, excerpt: "가".repeat(300) }));
+    }
+    at = new Date(NOW.getTime() + 2 * 3_600_000);
+    await day.run(hook);
+    const sent = slack.of("chat.postMessage").at(-1);
+    const sections = sectionsOf(sent);
+    expect(sections).toHaveLength(21);
+    expect(sections[0]).toBe("*오늘의 알림 23건*");
+    // Each thing whole, its link closed and its quote ended, far inside what Slack takes of a block.
+    for (const text of sections.slice(1)) {
+      expect(text.length).toBeLessThan(1000);
+      expect(text).toMatch(/^\*새 댓글\* · Park Hana\n<https:[^|>]+\|WEB-\d+ [^>]+…>\n> 가+…$/);
+    }
+    expect(blocksOf(sent)).toContain("나머지 3건은 콘솔에서 보세요.");
+    expect(ctx.all("waiting").every((record) => record.archivedAt !== null)).toBe(true);
+  });
+
+  it("keeps a line whose title and comment are all characters of two units, as an emoji is", async () => {
+    let at = NOW;
+    const rocket = String.fromCodePoint(0x1f680);
+    const party = String.fromCodePoint(0x1f389);
+    const { hook, slack, ctx } = await ready({
+      now: () => at,
+      tasks: () => ({ title: rocket.repeat(400), owner: brief(MINSU), workers: [] }),
+    });
+    await notify.run(ctx, { cadence: "daily", at: "11:30" });
+    await onOwnWork(hook, event("task.commented", { number: 12, excerpt: party.repeat(400) }));
+    // Held to a count of characters, which a record's schema counts in units, two to each of these.
+    expect(ctx.all("waiting")).toHaveLength(1);
+    at = new Date(NOW.getTime() + 2 * 3_600_000);
+    await day.run(hook);
+    const said = sectionsOf(slack.of("chat.postMessage").at(-1))[1] ?? "";
+    expect(said.startsWith(`*새 댓글* · Park Hana\n<${WEB}/12|WEB-12 ${rocket}`)).toBe(true);
+    expect(said.endsWith(`${party}…`)).toBe(true);
+  });
+
+  it("sends a line kept by the version before, which has its sentence alone, as it was said", async () => {
+    let at = NOW;
+    const { hook, slack, ctx } = await ready({ now: () => at });
+    await notify.run(ctx, { cadence: "daily", at: "11:30" });
+    await ctx.records("waiting").create(
+      {
+        personId: MINSU.id,
+        kind: "moved",
+        text: "Park Hana moved WEB-12 Ship the <page> to Done.",
+        url: `${WEB}/12`,
+        at: NOW.toISOString(),
+      },
+      { owner: MINSU.id },
+    );
+    await onOwnWork(hook, event("task.created", { number: 12 }));
+    at = new Date(NOW.getTime() + 2 * 3_600_000);
+    await day.run(hook);
+    expect(sectionsOf(slack.of("chat.postMessage").at(-1))).toEqual([
+      "*오늘의 알림 2건*",
+      `*새로 맡은 작업* · Park Hana\n<${WEB}/12|WEB-12 Ship the &lt;!channel&gt; page>`,
+      `Park Hana moved WEB-12 Ship the &lt;page&gt; to Done. (<${WEB}/12|콘솔에서 열기>)`,
+    ]);
   });
 });
 

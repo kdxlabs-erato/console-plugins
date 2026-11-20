@@ -186,13 +186,21 @@ export interface ServerWords {
     readonly nothing: string;
     readonly now: string;
     readonly daily: (at: string) => string;
-    readonly assigned: (actor: string, task: string) => string;
-    readonly changed: (actor: string, task: string, what: string) => string;
-    readonly moved: (actor: string, task: string, state: string) => string;
-    readonly commented: (actor: string, task: string, excerpt: string) => string;
-    readonly archived: (actor: string, task: string) => string;
-    readonly decision: (actor: string, question: string) => string;
-    readonly agent: (account: string, state: string, detail: string) => string;
+    /**
+     * What happened to a thing, in a few words that stand first: a message's first line, and an
+     * entry's of a day's message. A move is its states, which need no words of their own.
+     */
+    readonly facts: {
+      readonly assigned: string;
+      readonly changed: (what: string) => string;
+      readonly commented: string;
+      readonly comments: (count: string) => string;
+      readonly archived: string;
+      readonly decision: string;
+      readonly agent: (state: string) => string;
+    };
+    /** Who did it, where more than two did. */
+    readonly others: (name: string, count: string) => string;
     readonly fields: Readonly<Record<string, string>>;
     readonly states: Readonly<Record<string, string>>;
     readonly agentStates: Readonly<Record<string, string>>;
@@ -440,19 +448,16 @@ const EN: ServerWords = {
     nothing: "nothing",
     now: "as it happens",
     daily: (at) => `in one message a day at ${at}`,
-    assigned: (actor, task) => `${actor} gave you ${task}.`,
-    changed: (actor, task, what) => `${actor} changed ${what} of ${task}.`,
-    moved: (actor, task, state) => `${actor} moved ${task} to ${state}.`,
-    commented: (actor, task, excerpt) =>
-      excerpt.length === 0
-        ? `${actor} commented on ${task}.`
-        : `${actor} commented on ${task}: ${excerpt}`,
-    archived: (actor, task) => `${actor} put ${task} away.`,
-    decision: (actor, question) => `${actor} asks you to decide: ${question}`,
-    agent: (account, state, detail) =>
-      detail.length === 0
-        ? `Your agent account ${account} ${state}.`
-        : `Your agent account ${account} ${state}: ${detail}`,
+    facts: {
+      assigned: "Given to you",
+      changed: (what) => `Changed: ${what}`,
+      commented: "New comment",
+      comments: (count) => `${count} new comments`,
+      archived: "Put away",
+      decision: "A decision waits on you",
+      agent: (state) => `Your agent account ${state}`,
+    },
+    others: (name, count) => `${name} and ${count} more`,
     fields: {
       title: "the title",
       body: "the description",
@@ -720,19 +725,16 @@ const KO: ServerWords = {
     nothing: "아무것도",
     now: "그때그때",
     daily: (at) => `하루 한 번 ${at}에 모아서`,
-    assigned: (actor, task) => `${actor} 님이 ${task}을(를) 맡겼습니다.`,
-    changed: (actor, task, what) => `${actor} 님이 ${task}의 ${what}을(를) 바꿨습니다.`,
-    moved: (actor, task, state) => `${actor} 님이 ${task}을(를) ${state}(으)로 옮겼습니다.`,
-    commented: (actor, task, excerpt) =>
-      excerpt.length === 0
-        ? `${actor} 님이 ${task}에 댓글을 달았습니다.`
-        : `${actor} 님이 ${task}에 댓글을 달았습니다: ${excerpt}`,
-    archived: (actor, task) => `${actor} 님이 ${task}을(를) 보관했습니다.`,
-    decision: (actor, question) => `${actor} 님이 결정을 요청합니다: ${question}`,
-    agent: (account, state, detail) =>
-      detail.length === 0
-        ? `내 에이전트 계정 ${account}이(가) ${state}.`
-        : `내 에이전트 계정 ${account}이(가) ${state}: ${detail}`,
+    facts: {
+      assigned: "새로 맡은 작업",
+      changed: (what) => `${what} 변경`,
+      commented: "새 댓글",
+      comments: (count) => `새 댓글 ${count}건`,
+      archived: "보관된 작업",
+      decision: "나를 기다리는 결정",
+      agent: (state) => `에이전트 계정이 ${state}`,
+    },
+    others: (name, count) => `${name} 외 ${count}명`,
     fields: { title: "제목", body: "설명", startsOn: "시작일", dueOn: "마감일" },
     states: {
       idea: "아이디어",
