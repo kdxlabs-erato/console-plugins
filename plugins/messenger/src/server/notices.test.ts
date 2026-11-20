@@ -406,7 +406,7 @@ describe("notify and notices", () => {
       on: ["archived"],
       mute: [{ id: PROJECT.id, key: PROJECT.key, name: "Web" }],
     });
-    expect(said.text).toContain("나에게 맡겨진 태스크");
+    expect(said.text).toContain("나에게 맡겨진 작업");
     const after = (await notices.run(ctx, {})) as NoticesView;
     expect(after.kinds.moved).toBe(false);
     expect(after.kinds.archived).toBe(true);
@@ -454,7 +454,7 @@ describe("the button of a message", () => {
     expect(((await notices.run(ctx, {})) as NoticesView).kinds.commented).toBe(false);
     const told = slack.of("response_url")[0]?.json as { text: string; response_type: string };
     expect(told.response_type).toBe("ephemeral");
-    expect(told.text).toContain("내 태스크의 댓글");
+    expect(told.text).toContain("내 작업의 댓글");
     // A value that is no kind changes nothing and says nothing.
     await slackEndpoint.run(
       ctx,

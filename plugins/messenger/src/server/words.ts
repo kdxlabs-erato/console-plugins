@@ -709,11 +709,11 @@ const KO: ServerWords = {
   decisions: "결정",
   notice: {
     kinds: {
-      assigned: "나에게 맡겨진 태스크",
-      moved: "내 태스크의 상태 이동",
-      changed: "내 태스크의 변경",
-      commented: "내 태스크의 댓글",
-      archived: "내 태스크의 보관",
+      assigned: "나에게 맡겨진 작업",
+      moved: "내 작업의 상태 이동",
+      changed: "내 작업의 변경",
+      commented: "내 작업의 댓글",
+      archived: "내 작업의 보관",
       decisions: "나를 기다리는 결정",
       agents: "내 에이전트 계정",
     },

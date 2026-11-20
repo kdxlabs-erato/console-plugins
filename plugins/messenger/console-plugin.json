@@ -40,7 +40,7 @@
       },
       "description": {
         "en": "Chooses what they are told in Slack of their own work: tasks, decisions, their agent accounts.",
-        "ko": "자기 일(태스크, 결정, 내 에이전트 계정) 가운데 무엇을 Slack으로 받을지 정합니다."
+        "ko": "자기 일(작업, 결정, 내 에이전트 계정) 가운데 무엇을 Slack으로 받을지 정합니다."
       }
     },
     "messenger": {
