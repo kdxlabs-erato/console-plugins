@@ -609,8 +609,11 @@
 
 /* Lists of a pane: a row each, hairlines between */
 
+/* One column held to the list's own width: left to its rows, the column grew as wide as the
+   longest title, which runs on one line, and the row ran out of its pane. */
 .pl-hr-rows {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   padding: 0;
   list-style: none;
