@@ -165,8 +165,8 @@ settings:
 catalogs:
   default:
     '@skillcdn/console':
-      specifier: ^0.5.1
-      version: 0.5.1
+      specifier: ^0.5.2
+      version: 0.5.2
     '@types/node':
       specifier: ^24.19.1
       version: 24.19.2
@@ -194,11 +194,11 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       '@skillcdn/cli':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.5.3
+        version: 0.5.3
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -216,7 +216,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -234,7 +234,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -276,7 +276,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -594,8 +594,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@2.1.6':
-    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
+  '@hono/node-server@2.1.9':
+    resolution: {integrity: sha512-Sk4NQd3GFY0WZWCzndwFMPwJhtD0y9qjsQ+pjID0/03nK9pxyBCUoUHCho8QYBLBVhi0ssL8UkNPHqbgSOFPIQ==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4 || ^5.0.0-0
@@ -736,41 +736,41 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@skillcdn/cli@0.5.2':
-    resolution: {integrity: sha512-+YEdtse1LrC+ir0foc2/qjiMMcqrL7zKcttASRSury6AmmPmfm1ORkN52ZJ02diVmXeYC3JvCfjDJmtNyC9kfg==}
+  '@skillcdn/cli@0.5.3':
+    resolution: {integrity: sha512-w0Mt/l6dRVIo2dx3yFnh9E/i4bjEEwQOJFdq9bty3Ima/Sed00n1SV7IJ27L4LsTmsjZBaD0/J5NzEp1FwdP/Q==}
     engines: {node: '>=24'}
     hasBin: true
 
-  '@skillcdn/client@0.5.2':
-    resolution: {integrity: sha512-ImhLVjMfAn2cBKV2j25XlZMJUR5GHbOB4k4LXZpO22DD4PrbDbAWIRPmfIGGtAh/Lg0p8ZvysvltVmHhbhSqig==}
+  '@skillcdn/client@0.5.3':
+    resolution: {integrity: sha512-oOppcRbj6tr+5+eqa3zzO+nTRGU1UIQ+01C1tpBzN8MEKSxLVofheQI4EVA7kjL54tr5onDVMiXxSO1KN48J/w==}
     engines: {node: '>=24'}
 
-  '@skillcdn/console@0.5.1':
-    resolution: {integrity: sha512-1zgK/ZDOtsJhw/BoUtjlqd3IMdR8bDKmWD2z6gYv9Kc8cucXN6/CBAVHYiSDe1nApmfqpuE4NR+O9bOh7Tx1Uw==}
+  '@skillcdn/console@0.5.2':
+    resolution: {integrity: sha512-GhQjzVGI2Tze3LGI0ZqFASDYgOpJSd/Db9LI96lFAyH1wXs1QtVoA6kP+KpSmrRGC9698flRrCso4QzdXpaJwA==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.0.0
 
-  '@skillcdn/core@0.5.2':
-    resolution: {integrity: sha512-qk6h6P+OgbOZVhUwcSSJn3JU6D4vhFluJRGpgu1+K0CsEbAXGt4iqOPxdeWba2MsmSg88NZXS4yTaa+VMlioyg==}
+  '@skillcdn/core@0.5.3':
+    resolution: {integrity: sha512-XMIhSaPCUgSrVOF36XIEvsGbNnZyI8BzRkJPllgrGh9apCLojMwNQ7ekO8M8fPXtxni/LF1WkpgbS/s+1TDFVw==}
     engines: {node: '>=24'}
 
-  '@skillcdn/indexer@0.5.2':
-    resolution: {integrity: sha512-vwvV3H9ZMjQ10GO9yLiG0jOzKoujc2Rqe7vlwRxmcLEt3S1tIexsjHspfCWpmXcenSPnWkpF+lq6VIkGek8LXg==}
+  '@skillcdn/indexer@0.5.3':
+    resolution: {integrity: sha512-O4Qhz5dV5YnXrMhJoNltGv79TLKAOkMOfP56nzVPOjmEHn0+b4eydwh2TUk+5A0U7TC54U6qvgvqXRUl97bNdA==}
     engines: {node: '>=24'}
 
-  '@skillcdn/inference@0.5.2':
-    resolution: {integrity: sha512-LJgwL50zk7Q+DTLW/I9UfzDeasL9zDXrc1IUvPqmZue23pOffZCNx8zwZeLDJFMOYxka+JcQKSfAkm6WheBWuQ==}
+  '@skillcdn/inference@0.5.3':
+    resolution: {integrity: sha512-v5iNYdj/ayurpBk+fzw0K5GHLJjUzW+UElU1yzBQjoV2VYgBrQ+PkoWKfYrcfE46N6vyBw/+umfZNOvxIeXc2g==}
     engines: {node: '>=24'}
 
-  '@skillcdn/reader@0.5.2':
-    resolution: {integrity: sha512-gID5UbYJ0CfZf8eqTV/tNoFkdg2l8w1UAGIdi1837MkmQaFkhEJOmGDoLiefDDQ3TIBvO8wrej/O/eWIkiiZ+A==}
+  '@skillcdn/reader@0.5.3':
+    resolution: {integrity: sha512-UArP3QExnJnJ+s04aOFHtDPL6YgUu2TLyvHbQHl3lMXhXYmhsPlP9KTfdA6wYWarLQVvyTYm7eMYbcUmINtN6g==}
     engines: {node: '>=24'}
 
-  '@skillcdn/serve@0.5.2':
-    resolution: {integrity: sha512-CCHjaHr+P4WmuepgCXZykkc+Z2Cy3cn5aa53GtdDtWGRb5g2L0+KcIGYDZ+C27wMowvTfQOvKzoan0daviaFBw==}
+  '@skillcdn/serve@0.5.3':
+    resolution: {integrity: sha512-oxhMGhApN/R/JyBKpdw/Nov85Q6Yok5BG+KdS8g459QYeps3I4cAO/kH6HGyIZNuHqtpJuYlVc/GFQ/iFjwzbA==}
     engines: {node: '>=24'}
 
   '@turbo/darwin-64@2.11.10':
@@ -1092,8 +1092,8 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
-  hono@4.13.16:
-    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
+  hono@4.13.19:
+    resolution: {integrity: sha512-KmXvQAXwcAHV+muzbIwoJ23niEB5nMoDVr9WcRkU8mvjUECm/1+7v4Jgp7P7a+H6MLFrh+vXrGonGrGS+RQfkA==}
     engines: {node: '>=16.9.0'}
 
   html-url-attributes@3.0.1:
@@ -2014,9 +2014,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@2.1.6(hono@4.13.16)':
+  '@hono/node-server@2.1.9(hono@4.13.19)':
     dependencies:
-      hono: 4.13.16
+      hono: 4.13.19
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
@@ -2102,23 +2102,23 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@skillcdn/cli@0.5.2':
+  '@skillcdn/cli@0.5.3':
     dependencies:
-      '@skillcdn/client': 0.5.2
-      '@skillcdn/core': 0.5.2
-      '@skillcdn/indexer': 0.5.2
-      '@skillcdn/inference': 0.5.2
-      '@skillcdn/reader': 0.5.2
-      '@skillcdn/serve': 0.5.2
+      '@skillcdn/client': 0.5.3
+      '@skillcdn/core': 0.5.3
+      '@skillcdn/indexer': 0.5.3
+      '@skillcdn/inference': 0.5.3
+      '@skillcdn/reader': 0.5.3
+      '@skillcdn/serve': 0.5.3
 
-  '@skillcdn/client@0.5.2':
+  '@skillcdn/client@0.5.3':
     dependencies:
-      '@skillcdn/core': 0.5.2
+      '@skillcdn/core': 0.5.3
 
-  '@skillcdn/console@0.5.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@skillcdn/console@0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@skillcdn/cli': 0.5.2
-      '@skillcdn/core': 0.5.2
+      '@skillcdn/cli': 0.5.3
+      '@skillcdn/core': 0.5.3
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       react-markdown: 10.1.0(@types/react@19.3.0)(react@19.3.1)
@@ -2128,31 +2128,31 @@ snapshots:
       - '@types/react'
       - supports-color
 
-  '@skillcdn/core@0.5.2':
+  '@skillcdn/core@0.5.3':
     dependencies:
       yaml: 2.9.1
       zod: 4.6.7
 
-  '@skillcdn/indexer@0.5.2':
+  '@skillcdn/indexer@0.5.3':
     dependencies:
-      '@skillcdn/core': 0.5.2
+      '@skillcdn/core': 0.5.3
 
-  '@skillcdn/inference@0.5.2':
+  '@skillcdn/inference@0.5.3':
     dependencies:
-      '@skillcdn/core': 0.5.2
+      '@skillcdn/core': 0.5.3
       zod: 4.6.7
 
-  '@skillcdn/reader@0.5.2':
+  '@skillcdn/reader@0.5.3':
     dependencies:
-      '@skillcdn/core': 0.5.2
+      '@skillcdn/core': 0.5.3
 
-  '@skillcdn/serve@0.5.2':
+  '@skillcdn/serve@0.5.3':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.16)
+      '@hono/node-server': 2.1.9(hono@4.13.19)
       '@modelcontextprotocol/server': 2.4.0
-      '@skillcdn/core': 0.5.2
-      '@skillcdn/reader': 0.5.2
-      hono: 4.13.16
+      '@skillcdn/core': 0.5.3
+      '@skillcdn/reader': 0.5.3
+      hono: 4.13.19
       zod: 4.6.7
 
   '@turbo/darwin-64@2.11.10':
@@ -2409,7 +2409,7 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.5
 
-  hono@4.13.16: {}
+  hono@4.13.19: {}
 
   html-url-attributes@3.0.1: {}
 
