@@ -1,5 +1,0 @@
----
-"@skillcdn/console-plugin-hr": patch
----
-
-The pages write a day and a moment as the console does, in every language: the month in short and the day, the hour and the minute after a moment's, and the year only where it is not this one, so that a request reads "Nov 26 ~ Nov 27" and a day of next year keeps its year; the front page's announcements no longer write one day with its year and the next without. The cards of the Announcements page, of Approvals and of Setup's leave types and leave policies stand on the page itself, as the console's own lists of cards do, with no pane around them: a section's title stays as a heading over its cards, with its button beside it, and a form that takes the cards' place is a pane. The buttons beside a heading on Setup (add an exception, new type, new policy) and the one that opens the decision on each card of Approvals are quiet ones, which leaves the filled button to a form's own save and to the page's one act. The title of the latest announcement on the front page is the size of a section's title rather than a headline's.

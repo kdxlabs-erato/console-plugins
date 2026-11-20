@@ -1,5 +1,27 @@
 # @skillcdn/console-plugin-messenger
 
+## 0.5.0
+
+### Minor Changes
+
+- [`0beab02`](https://github.com/skillcdn/console-plugins/commit/0beab029dc0f468083f171a3ea26ec71d9198619) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A message about one's own work is read at a glance. It says what happened first, in a few words in bold (given to you; the states of a move, as Ready → In review; what changed; a new comment; put away; a decision waiting on you; how an agent account stands), then who did it; under it the task or the decision by its name, which is the link to it on the console, where a link stood after the sentence; and a comment's words quoted under that. In Korean no name stands before a particle any more, so nothing reads 을(를) or (으)로.
+  
+  The day's message says each task, decision or agent account once, with everything that happened to it, where it had a line per event in the order they came: a task given, moved twice and commented is one entry. What waits on the person comes first, a decision, then an agent account, then a task given to them or put up for review. No entry is cut: a long day passed what Slack takes of one block, and its last lines were dropped unsaid. Twenty things at most, the rest as a count.
+  
+  A line kept by 0.4 when a deployment moves is sent as it was said. The records' data version stays 3.
+
+### Patch Changes
+
+- [`9fedf5f`](https://github.com/skillcdn/console-plugins/commit/9fedf5fdecf25526a135a2b0452401d2c73ff366) Thanks [@samo-lucid](https://github.com/samo-lucid)! - Built against console 0.5.2: a page says its height to the console as it is drawn, rounded up, so that its frame is never a pixel shorter than the page. It runs on the consoles it ran on before.
+
+- [`35b9ecb`](https://github.com/skillcdn/console-plugins/commit/35b9ecb33053ade51ff7eaf8d3597f60ad00f375) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The day's message goes within five minutes of the time a person chose, where it went up to an hour after: the job that sends it ran every hour, at whatever minute its first run fell on, so that a message chosen for 09:00 came at 09:47. It runs every five minutes now, the least a job may, and a run that finds nobody due writes nothing. The page My notifications and the skill `my-notifications` say five minutes.
+
+- [`112b254`](https://github.com/skillcdn/console-plugins/commit/112b2546f44b4a1c6367b0c868ba23035305a667) Thanks [@samo-lucid](https://github.com/samo-lucid)! - In Korean, a task is 작업 wherever the messenger names one, the word the console calls it by from 0.5.2: the kinds of notices as the command `notify` and a message's button say them, which said 태스크 where the page My notifications already said 작업, the member role's description, and the skill `my-notifications`.
+
+- [`01cf5b3`](https://github.com/skillcdn/console-plugins/commit/01cf5b3fd1c3df724bd3c506663c3030ef431367) Thanks [@samo-mozzi](https://github.com/samo-mozzi)! - My notifications lays its choices out as the console's settings page does: each a row, its name and hint in a narrow column beside its controls, which take the rest of the pane, and the save under a line, so that the kinds of notice run along one row and every choice starts near its name. The time of the day's message stands under the choice that asks for it, its field the width of a time. Where no Slack account of the person's is matched, the Where pane no longer says so a second time under the warning above it.
+
+- [`8d3413a`](https://github.com/skillcdn/console-plugins/commit/8d3413a6e1c8388e5e40afa000872a7138663aef) Thanks [@samo-mozzi](https://github.com/samo-mozzi)! - Each page is titled as its entry in the menu names it: the page that connects Slack is Connection, and a project's tab is Messenger; the sentence beside the title still says what it does with Slack. A warning on a page is a few words in bold and the sentence under them, where the whole sentence was bold, and it stands at the top of the page's main column on every page, on Routes too, where it ran across the form beside the list. The Activity page names the console's own events as it names HR's (task created, decision raised, and the rest) and keeps the raw name only of an event it has no words for. A moment is written as the console writes one, the month in short, the day and the time, with the year only where it is not this one. In Korean the pages call a task by one word throughout, the console's own.
+
 ## 0.4.0
 
 ### Minor Changes

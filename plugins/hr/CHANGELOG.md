@@ -1,5 +1,23 @@
 # @skillcdn/console-plugin-hr
 
+## 0.4.1
+
+### Patch Changes
+
+- [`9fedf5f`](https://github.com/skillcdn/console-plugins/commit/9fedf5fdecf25526a135a2b0452401d2c73ff366) Thanks [@samo-lucid](https://github.com/samo-lucid)! - Built against console 0.5.2: a page says its height to the console as it is drawn, rounded up, so that its frame is never a pixel shorter than the page. It runs on the consoles it ran on before.
+
+- [`860ea56`](https://github.com/skillcdn/console-plugins/commit/860ea566bbf0ba9fcbed86736640b7fd66d8d9ae) Thanks [@samo-lucid](https://github.com/samo-lucid)! - In Korean, the preset that grants nothing says HR is reminded by a 작업, the word the console calls a task by from 0.5.2.
+
+- [`d3e1130`](https://github.com/skillcdn/console-plugins/commit/d3e1130b1872236af7a0c44ecae8cd6e7b25bd4f) Thanks [@samo-mozzi](https://github.com/samo-mozzi)! - The bar of days draws the days used in the blue a chart's series is drawn in, and the days left in a wash of the same blue, where it took the accent: one blue with the console's progress bars and charts. The days waiting keep the yellow mark.
+
+- [`4ae88cb`](https://github.com/skillcdn/console-plugins/commit/4ae88cb31a84f7133d187633ff9f40ce07535566) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A long title in a list of rows ends in an ellipsis inside its pane. On the Overview, an announcement whose title was longer than the pane ran out of it, took its marks and its date out of sight, and made the page wider than its frame, at a phone's width above all.
+
+- [`833f75c`](https://github.com/skillcdn/console-plugins/commit/833f75cbb5c97c050a430992d425c8a055f4e919) Thanks [@samo-mozzi](https://github.com/samo-mozzi)! - The pages write a day and a moment as the console does, in every language: the month in short and the day, the hour and the minute after a moment's, and the year only where it is not this one, so that a request reads "Nov 26 ~ Nov 27" and a day of next year keeps its year; the front page's announcements no longer write one day with its year and the next without. The cards of the Announcements page, of Approvals and of Setup's leave types and leave policies stand on the page itself, as the console's own lists of cards do, with no pane around them: a section's title stays as a heading over its cards, with its button beside it, and a form that takes the cards' place is a pane. The buttons beside a heading on Setup (add an exception, new type, new policy) and the one that opens the decision on each card of Approvals are quiet ones, which leaves the filled button to a form's own save and to the page's one act. The title of the latest announcement on the front page is the size of a section's title rather than a headline's.
+
+- [`b91af7c`](https://github.com/skillcdn/console-plugins/commit/b91af7c09cb4c746e374b9487991e85aa593adcc) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A kind of leave kept before each kind had its own rule of cancelling (data version 2) is read with the rule the workspace's one setting meant, as the upgrade to data version 3 writes it, and the rule is written with the kind's next change. On a deployment whose upgrade did not run, the kinds' list, the request form and a request's view failed until HR gave every kind all six cancelling arguments by hand. A console from 0.5.0 runs the upgrade, and nothing changes there.
+
+- [`ea97be7`](https://github.com/skillcdn/console-plugins/commit/ea97be7704146ebc50daf265ee007a3966929a74) Thanks [@samo-lucid](https://github.com/samo-lucid)! - On a phone, the search field above Announcements and People keeps its width in the row of filters, which scrolls sideways there as the console's own does. It shrank to an empty box, with no room to see what was typed.
+
 ## 0.4.0
 
 ### Minor Changes
