@@ -1130,11 +1130,12 @@ async function sendDays(ctx: PluginContext): Promise<void> {
 
 export const day: JobDefinition = {
   about:
-    "Sends each person who chose one their message of the day, within six minutes of their time.",
+    "Sends each person who chose one their message of the day, within five minutes of their time.",
   // The least a job may run at. A person's time is to the minute, and a job with no `at` is not
   // held to the clock: its runs fall wherever the first one did, so that an hourly one sent a
-  // message chosen for 09:00 at 09:47. The console counts the next run from the end of the last
-  // and looks once a minute, so that the runs fall six minutes apart, not five.
+  // message chosen for 09:00 at 09:47. From console 0.5.3 the next run is a period after the
+  // time the last was due; a console before counted it from the end of the last run and looked
+  // once a minute, so that its runs fell six minutes apart, not five.
   every: "PT5M",
   async run(ctx) {
     await sendDays(ctx);

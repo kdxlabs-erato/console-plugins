@@ -165,8 +165,8 @@ settings:
 catalogs:
   default:
     '@skillcdn/console':
-      specifier: ^0.5.2
-      version: 0.5.2
+      specifier: ^0.5.3
+      version: 0.5.3
     '@types/node':
       specifier: ^24.19.1
       version: 24.19.2
@@ -198,7 +198,7 @@ importers:
         version: 0.5.3
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.3(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -216,7 +216,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.3(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -234,7 +234,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.3(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -276,7 +276,7 @@ importers:
     devDependencies:
       '@skillcdn/console':
         specifier: 'catalog:'
-        version: 0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.5.3(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -745,8 +745,8 @@ packages:
     resolution: {integrity: sha512-oOppcRbj6tr+5+eqa3zzO+nTRGU1UIQ+01C1tpBzN8MEKSxLVofheQI4EVA7kjL54tr5onDVMiXxSO1KN48J/w==}
     engines: {node: '>=24'}
 
-  '@skillcdn/console@0.5.2':
-    resolution: {integrity: sha512-GhQjzVGI2Tze3LGI0ZqFASDYgOpJSd/Db9LI96lFAyH1wXs1QtVoA6kP+KpSmrRGC9698flRrCso4QzdXpaJwA==}
+  '@skillcdn/console@0.5.3':
+    resolution: {integrity: sha512-4J1wcnvJzKSE0ODASPmsF93gV8xgokXr/KQqVP1F24Ffat8urgtxW+wytLYjcteUodKzOf+V36QAoQGmraMyPw==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -2115,7 +2115,7 @@ snapshots:
     dependencies:
       '@skillcdn/core': 0.5.3
 
-  '@skillcdn/console@0.5.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@skillcdn/console@0.5.3(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@skillcdn/cli': 0.5.3
       '@skillcdn/core': 0.5.3
