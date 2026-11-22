@@ -3,7 +3,9 @@
 // later is one more pack in the map. The console sends the frame the person's language; the tabs
 // and the widgets' names come from the manifest in that language, the words inside the frame
 // from here. Nothing a page shows is a literal elsewhere; a name a person wrote (a leave type, a
-// holiday, a policy) comes from the records and is shown as text.
+// holiday, a policy) comes from the records and is shown as text. A Korean sentence that carries
+// a name takes its particle from the console's helpers, as the console's own Korean does.
+import { asObject } from "@skillcdn/console/plugin/web";
 
 export type SetupTab = "approval" | "types" | "policies" | "holidays" | "general";
 
@@ -868,7 +870,7 @@ const KOREAN: Words = {
   myRequestsEmpty: "아직 신청이 없습니다.",
   lateBadge: "기한 후",
   recordedBy: (name) => `${name}님이 대신 등록`,
-  requestedVia: (plugin) => `${plugin}을(를) 통해 신청`,
+  requestedVia: (plugin) => `${asObject(plugin)} 통해 신청`,
   sentOnTo: (names) => `${names}에게 넘어감`,
   byRule: (name) => `예외: ${name}`,
   cancelLeave: "취소",

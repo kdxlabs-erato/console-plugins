@@ -2,7 +2,9 @@
 // the title of a task, the line a command prints, a refusal, a policy's sentence. A plugin writes one
 // text, in the language of whoever it is for (the console's ADR-0065): the caller's for a command's
 // answer and a refusal, the decider's for a decision, HR's for a task. English for any language the
-// plugin does not speak. The pages have their own words in ../web/words.ts.
+// plugin does not speak. The pages have their own words in ../web/words.ts. A Korean sentence that
+// carries a name takes its particle from the console's helpers, as the console's own Korean does.
+import { asObject, asSubject, asWay } from "@skillcdn/console/plugin";
 import type {
   ApprovalRule,
   ApprovalStep,
@@ -796,13 +798,13 @@ const KOREAN: ServerWords = {
   enrolled: (who, leave) => `${who}: 기록을 저장했습니다. 휴가 ${leave ? "켜짐" : "꺼짐"}.`,
   recounted: (who, policy) => `${who}: 규정 ${policy}에 맞춰 원장을 다시 셌습니다.`,
   reversedLine: (days, type, who) => `${who}의 ${type} ${days} 줄을 되돌렸습니다.`,
-  offboarded: (who, day) => `${who}은(는) ${day}에 퇴직합니다. 그 뒤로는 발생하지 않습니다.`,
+  offboarded: (who, day) => `${asSubject(who)} ${day}에 퇴직합니다. 그 뒤로는 발생하지 않습니다.`,
   accrued: (count, people) => `${people}명에게 ${count}건을 기록했습니다.`,
-  policySaved: (key) => `규정 ${key}을(를) 저장했습니다.`,
-  typeSaved: (key) => `휴가 종류 ${key}을(를) 저장했습니다.`,
+  policySaved: (key) => `규정 ${asObject(key)} 저장했습니다.`,
+  typeSaved: (key) => `휴가 종류 ${asObject(key)} 저장했습니다.`,
   configSaved: "설정을 저장했습니다.",
-  holidaySaved: (day) => `공휴일 ${day}을(를) 저장했습니다.`,
-  holidayRemoved: (day) => `공휴일 ${day}을(를) 삭제했습니다.`,
+  holidaySaved: (day) => `공휴일 ${asObject(day)} 저장했습니다.`,
+  holidayRemoved: (day) => `공휴일 ${asObject(day)} 삭제했습니다.`,
   holidaysWritten: (count, year, calendar) =>
     `${calendar} 캘린더에서 ${year}년 공휴일 ${count}일을 기록했습니다.`,
   setupDone: (types, policy, holidays) =>
@@ -912,7 +914,7 @@ const KOREAN: ServerWords = {
     },
     available: (days, on) => `${on} 기준 잔여 ${days}.`,
     monthlyFrom: (policy, login) =>
-      `첫해 월차는 규정 ${policy}에서 나왔습니다. 회사가 주지 않는다면 policy ${policy} --monthly off로 끄고, recount ${login}으로 이미 쓴 줄을 되돌리세요.`,
+      `첫해 월차는 규정 ${policy}에서 나왔습니다. 회사가 주지 않는다면 policy ${policy} --monthly off로 끄고, ${asWay(`recount ${login}`)} 이미 쓴 줄을 되돌리세요.`,
   },
   expiryTaskTitle: (on) => `${on} 소멸 예정 연차: 사용 촉진 안내`,
   expiryTaskBody: (on, rows, daysBefore) =>
@@ -922,10 +924,10 @@ const KOREAN: ServerWords = {
     `규정이 자동으로 주는 일수가 없습니다. ${period}에 시작하는 기간의 일수를 \`console plugin hr adjust <login> --type annual --days <n> --note <사유>\`로 각자에게 넣으세요. 만료는 규정을 따릅니다.\n\n${rows.map((row) => `- ${row}`).join("\n")}`,
   leftTaskTitle: (who) => `${who} 퇴직: 휴가 정산`,
   leftTaskBody: (who, day, remaining) =>
-    `${who}은(는) ${day}에 콘솔에서 비활성화되었습니다. 휴가는 꺼졌고 더 발생하지 않습니다. 미사용 잔여: ${remaining}. 규정과 법에 따라(수당 또는 없음) \`console plugin hr adjust\`로 정산하세요.`,
+    `${asSubject(who)} ${day}에 콘솔에서 비활성화되었습니다. 휴가는 꺼졌고 더 발생하지 않습니다. 미사용 잔여: ${remaining}. 규정과 법에 따라(수당 또는 없음) \`console plugin hr adjust\`로 정산하세요.`,
   backTaskTitle: (who) => `${who} 복귀: 휴가 처리 결정`,
   backTaskBody: (who, login, day) =>
-    `${who}은(는) ${day}에 콘솔에서 다시 활성화되었습니다. 휴가는 퇴직 이후 꺼진 채입니다. 다시 재직 중이라면 \`console plugin hr enroll ${login} --leave on --hired-on <날짜>\`로 켜고, 근속을 어느 날부터 세는지 정하세요.`,
+    `${asSubject(who)} ${day}에 콘솔에서 다시 활성화되었습니다. 휴가는 퇴직 이후 꺼진 채입니다. 다시 재직 중이라면 \`console plugin hr enroll ${login} --leave on --hired-on <날짜>\`로 켜고, 근속을 어느 날부터 세는지 정하세요.`,
   boardTaskTitle: (who) => `${who}의 결재 요청이 지정된 사람에게 닿지 못했습니다`,
   boardTaskBody: (who, names) =>
     `콘솔이 ${who}의 결재 요청을 ${names}에게 보내지 못했습니다. 콘솔을 떠난 사람일 수 있습니다. 이번 요청은 그 위 사람에게 넘어갔습니다. 결재선이나 콘솔 구성원 페이지의 매니저를 다시 정하세요.`,
@@ -964,7 +966,7 @@ const KOREAN: ServerWords = {
     spanTooLong: (days) => `한 번에 ${days}일까지 신청할 수 있습니다.`,
     calendarTooLong: (days) => `캘린더는 ${days}일까지 볼 수 있습니다.`,
     partOneDay: "반차와 반반차는 하루 단위입니다. 하루만 고르세요.",
-    partNotTaken: (type) => `${type}은(는) 그 단위로 쓸 수 없습니다.`,
+    partNotTaken: (type) => `${asObject(type)} 그 단위로 쓸 수 없습니다.`,
     afterLeaving: (day) => `이 사람의 퇴직일은 ${day}입니다.`,
     tooFarBack: (days) =>
       `오늘보다 ${days}일 전까지만 신청할 수 있습니다. 더 오래된 휴가는 인사 담당이 기록합니다.`,
@@ -972,8 +974,8 @@ const KOREAN: ServerWords = {
     lateForManagers: (notice) =>
       `이 휴가는 ${notice} 신청해야 합니다. 기한이 지나면 매니저나 인사 담당이 등록합니다.`,
     afterTheFact: "지난 날짜는 이 종류로 신청할 수 없습니다. 매니저나 인사 담당이 등록합니다.",
-    unknownType: (key) => `휴가 종류 ${key}이(가) 없습니다.`,
-    reasonRequired: (type) => `${type}은(는) 사유를 적어야 합니다.`,
+    unknownType: (key) => `휴가 종류 ${asSubject(key)} 없습니다.`,
+    reasonRequired: (type) => `${type}에는 사유를 적어야 합니다.`,
     noPolicy: "적용할 휴가 규정이 아직 없습니다. 인사 담당이 설정해야 합니다.",
     noDays: "고른 기간에 근무일이 없습니다. 주말과 공휴일은 휴가로 세지 않습니다.",
     overlap: "이 사람의 다른 신청과 기간이 겹칩니다.",
@@ -996,27 +998,27 @@ const KOREAN: ServerWords = {
     daysInQuarters: "일수는 0이 아닌 0.25일 단위 숫자입니다.",
     payoutTakes: "수당 지급은 일수를 차감합니다. 음수로 적으세요.",
     grantGives: "부여는 일수를 더합니다. 양수로 적으세요.",
-    noBalance: (type) => `${type}은(는) 잔여를 두지 않습니다.`,
+    noBalance: (type) => `${type}에는 잔여를 두지 않습니다.`,
     expiryBefore: "만료일이 적용일보다 앞입니다.",
-    unknownPolicy: (key) => `규정 ${key}이(가) 없습니다.`,
+    unknownPolicy: (key) => `규정 ${asSubject(key)} 없습니다.`,
     hiredOnRequired: "휴가를 켜려면 입사일이 필요합니다.",
     lastDayBeforeHire: "마지막 날이 입사일보다 앞입니다.",
     tiersShape: (part) =>
-      `근속 구간은 연수:일수를 쉼표로 이어 적습니다. "${part}"은(는) 맞지 않습니다.`,
+      `근속 구간은 연수:일수를 쉼표로 이어 적습니다. ${asSubject(`"${part}"`)} 맞지 않습니다.`,
     tiersCount: "근속 구간은 1개에서 40개까지입니다.",
     tiersRepeat: "같은 연수로 시작하는 구간이 둘 있습니다.",
     startShape: "시작일은 MM-DD입니다.",
     startDay: "시작일은 해마다 있는 날이어야 합니다.",
     keyShape: "키는 영문 소문자, 숫자, 대시로 된 한 단어입니다.",
     carryOverDays: "일부 이월에는 이월할 일수가 필요합니다.",
-    nameShape: (item) => `이름은 <언어>=<이름>입니다. "${item}"은(는) 맞지 않습니다.`,
+    nameShape: (item) => `이름은 <언어>=<이름>입니다. ${asSubject(`"${item}"`)} 맞지 않습니다.`,
     nameNeeded: "이름이 필요합니다: ko=... 또는 en=...",
     annualBalance: "연차는 규정의 잔여를 씁니다.",
     annualStaysOn: "연차는 끌 수 없습니다.",
     noYear: (calendar, year, years) =>
       `${calendar} 캘린더에는 ${year}년 표가 없습니다(있는 해: ${years}). 그해 공휴일은 직접 적으세요.`,
     noCalendar: "캘린더를 고르거나 설정에서 정하세요.",
-    noPreset: (key) => `프리셋 ${key}이(가) 없습니다.`,
+    noPreset: (key) => `프리셋 ${asSubject(key)} 없습니다.`,
     configShape: (what) => `설정이 맞지 않습니다: ${what}.`,
     timeShape: "시각은 HH:MM입니다.",
     notVisibleBalance: "이 사람의 잔여는 볼 수 없습니다.",
@@ -1032,12 +1034,12 @@ const KOREAN: ServerWords = {
     announcementNeedsBody: "게시하려면 본문이 필요합니다.",
   },
   untitled: "제목 없음",
-  announcementDrafted: (title, id) => `"${title}"을(를) 임시 저장했습니다. 공지 ${id}.`,
-  announcementPublished: (title, id) => `"${title}"을(를) 게시했습니다. 공지 ${id}.`,
-  announcementChanged: (title, id) => `"${title}"을(를) 수정했습니다. 공지 ${id}.`,
+  announcementDrafted: (title, id) => `${asObject(`"${title}"`)} 임시 저장했습니다. 공지 ${id}.`,
+  announcementPublished: (title, id) => `${asObject(`"${title}"`)} 게시했습니다. 공지 ${id}.`,
+  announcementChanged: (title, id) => `${asObject(`"${title}"`)} 수정했습니다. 공지 ${id}.`,
   announcementWithdrawn: (title, id) =>
     `"${title}"의 게시를 내렸습니다. 내 임시 저장으로 옮겼습니다. 공지 ${id}.`,
-  announcementRemoved: (title) => `"${title}"을(를) 삭제했습니다.`,
+  announcementRemoved: (title) => `${asObject(`"${title}"`)} 삭제했습니다.`,
   pictureAttached: (line) => `이미지를 첨부했습니다. 표시하려면 이 줄을 본문에 넣으세요:\n${line}`,
 };
 
