@@ -298,7 +298,7 @@ const ENGLISH = {
 
   peopleTitle: "People",
   peopleLead: (enrolled: string, all: string) => `${enrolled} of ${all} enrolled`,
-  filterPlaceholder: "Search by name, login or title",
+  filterPlaceholder: "Name, login or title",
   showAll: "All",
   peopleEmpty: "Nobody here.",
   peopleUnit: "out today",
@@ -918,7 +918,7 @@ const KOREAN: Words = {
 
   peopleTitle: "구성원",
   peopleLead: (enrolled, all) => `${all}명 중 ${enrolled}명 등록`,
-  filterPlaceholder: "이름, 로그인, 직함으로 찾기",
+  filterPlaceholder: "이름, 로그인, 직함",
   showAll: "전체",
   peopleEmpty: "해당하는 사람이 없습니다.",
   peopleUnit: "명 오늘 휴가",

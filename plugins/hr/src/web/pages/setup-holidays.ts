@@ -114,7 +114,7 @@ export async function holidaysTab(body: HTMLElement, view: SetupView): Promise<v
     }
     const rows = el("ul", "rows rows-columns");
     for (const holiday of holidays) {
-      const item = el("li", "rows-item");
+      const item = el("li", "rows-item holiday-row");
       const remove = button(
         words.remove,
         () => {
@@ -131,11 +131,16 @@ export async function holidaysTab(body: HTMLElement, view: SetupView): Promise<v
         "ghost",
         true,
       );
+      const kind = badge(
+        words.holidayKind[holiday.kind],
+        holiday.kind === "company" ? "accent" : "neutral",
+      );
+      kind.classList.add("pl-hr-holiday-kind");
       item.append(
         el("span", "rows-day", format.monthDay(holiday.on)),
         el("span", "sc-muted rows-week", format.weekday(holiday.on)),
         el("span", "rows-main", nameIn(holiday.name, language)),
-        badge(words.holidayKind[holiday.kind], holiday.kind === "company" ? "accent" : "neutral"),
+        kind,
         remove,
       );
       rows.append(item);

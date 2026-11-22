@@ -180,7 +180,7 @@ export function termsFacts(report: BalanceReport, view: LeaveView): HTMLElement 
   }
   const node = el("dl", "sc-facts-plain terms");
   const pair = (label: string, value: string | Node, hint?: string) => {
-    const item = el("div", "");
+    const item = el("div", "terms-row");
     const detail = el("dd", "");
     detail.append(value);
     if (hint !== undefined) {
@@ -398,22 +398,25 @@ export function ledgerTable(
       const line = el("li", entry.reversed ? "ledger-line ledger-line-reversed" : "ledger-line");
       // A line of leave taken carries the days it took as its note: written as every day is.
       const span = /^(\d{4}-\d{2}-\d{2})(?: ~ (\d{4}-\d{2}-\d{2}))?$/.exec(entry.note);
-      const detail = [
+      // A day is one thing, never broken across two lines, as the console writes a moment.
+      const moment = (text: string): HTMLElement => el("time", "ledger-moment", text);
+      const parts: (string | HTMLElement)[] = [
         span === null
           ? entry.note
-          : span[2] === undefined
-            ? format.day(span[1] ?? "")
-            : `${format.day(span[1] ?? "")} ~ ${format.day(span[2])}`,
-        ...(entry.expiresOn === null ? [] : [words.untilDay(format.day(entry.expiresOn))]),
+          : moment(
+              span[2] === undefined
+                ? format.day(span[1] ?? "")
+                : `${format.day(span[1] ?? "")} ~ ${format.day(span[2])}`,
+            ),
+        ...(entry.expiresOn === null ? [] : [moment(words.untilDay(format.day(entry.expiresOn)))]),
         ...(entry.reversed ? [words.reversedMark] : []),
-      ]
-        .filter((part) => part.length > 0)
-        .join(" · ");
+      ].filter((part) => typeof part !== "string" || part.length > 0);
+      const detail = el("span", "ledger-detail prose");
+      parts.forEach((part, index) => {
+        detail.append(...(index === 0 ? [part] : [" · ", part]));
+      });
       const main = el("div", "ledger-main");
-      main.append(
-        el("span", "ledger-title", rowTitle(entry, typeName, words)),
-        el("span", "ledger-detail prose", detail),
-      );
+      main.append(el("span", "ledger-title", rowTitle(entry, typeName, words)), detail);
       const side = el("div", "ledger-side");
       side.append(
         el(

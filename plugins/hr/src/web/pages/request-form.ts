@@ -236,6 +236,8 @@ export function requestForm(options: RequestFormOptions): HTMLElement {
     actions(submit),
     status,
   );
+  // Its rows stand at their own height, however tall the rules beside it make the pair.
+  node.classList.add("pl-hr-request-form");
   onSubmit(node, async () => {
     const args = argsOf();
     if (args === null) {

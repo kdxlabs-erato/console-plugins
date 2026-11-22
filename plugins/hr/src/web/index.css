@@ -14,6 +14,15 @@
   font-family: var(--sc-font-sans);
 }
 
+/* What people wrote is in whatever language they wrote it: a Korean title on a page in English
+   keeps its words whole, as the console keeps them on a page in Korean (`:lang(ko)`). Latin text
+   breaks as before, and a word longer than its line still breaks. */
+.pl-hr-page,
+.pl-hr-widget {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
 /* The console's grids set a display of their own, which would win over the browser's hidden;
    these selectors are more specific than any class alone. */
 .pl-hr-page [hidden],
@@ -647,6 +656,26 @@
   border-bottom: var(--sc-hairline);
 }
 
+/* A holiday: its day, its weekday, its name, its kind and the way to remove it, the button at the
+   row's end however long the name. Where the window is narrow, the kind goes under the name, so
+   that the name keeps the room to be read and the button is not pushed under the row. */
+.pl-hr-holiday-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+}
+
+@media (max-width: 40rem) {
+  .pl-hr-holiday-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+
+  .pl-hr-holiday-kind {
+    grid-row: 2;
+    grid-column: 3;
+    justify-self: start;
+  }
+}
+
 /* A list of rows in a wide pane: as many columns as the width holds, each row ruled above, so that
    no row runs from one edge of a wide page to the other. */
 .pl-hr-rows-grid {
@@ -707,6 +736,11 @@
   grid-template-columns: minmax(0, 3fr) minmax(14rem, 2fr);
   gap: var(--sc-space-6);
   align-items: stretch;
+}
+
+/* The form's rows at their own height: stretched to the rules beside it, they spread apart. */
+.pl-hr-request-form {
+  align-content: start;
 }
 
 .pl-hr-quote {
@@ -960,6 +994,13 @@
 
 /* My terms */
 
+/* In the narrow pane beside the balances, each name over its value, as the facts set them where the
+   window is narrow: beside a name column of up to 12rem, a policy's sentence had a column a few
+   words wide. */
+.pl-hr-terms-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .pl-hr-terms-people {
   display: inline-flex;
   align-items: center;
@@ -1092,6 +1133,11 @@
 
 .pl-hr-ledger-detail:empty {
   display: none;
+}
+
+/* A day or a span of days, and the day a grant lasts until, each on one line. */
+.pl-hr-ledger-moment {
+  white-space: nowrap;
 }
 
 .pl-hr-ledger-side {
@@ -1817,6 +1863,8 @@
   }
 }
 
+/* A pixel of room at each end: the console sets a widget's frame at a width of half pixels while
+   its page lays out on whole ones, so that a day's border on the last pixel was cut in half. */
 .pl-hr-week-strip {
   display: grid;
   flex: 1 1 0;
@@ -1824,6 +1872,7 @@
   grid-auto-flow: column;
   gap: var(--sc-space-1);
   min-height: 0;
+  padding-inline: 1px;
 }
 
 .pl-hr-week-day {
