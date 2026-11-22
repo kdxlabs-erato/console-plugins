@@ -30,6 +30,22 @@ This repository holds the plugins KDX Labs writes for its own console and publis
 
 A plugin is a whole area of the organization's work, named as a company names the function (HR, CRM, Finance), so that it takes over what that function does by hand; a feature within an area (leave, attendance) is a command, a page or a skill of the plugin, not a plugin of its own. The console's tab groups stay the console's plain words. Each plugin's README carries its design: a row per thing the feature does, who starts it, what it became in the plugin and the test that proves it; and what an administrator consents to, binds and fills when they enable it.
 
+## Skills
+
+What an agent reads to work a plugin for a person, shipped in each plugin's package and served by SkillCDN; [docs/start.md](docs/start.md), the page an agent reads first, says which one a request leads to.
+
+<!-- skillcdn:catalog -->
+| Skill | What it does |
+|---|---|
+| [hr-administration](plugins/hr/skills/hr-administration/SKILL.md) | Keeping leave through the HR plugin, for HR: set it up for a country, enroll people, keep the approval line, the policies, the kinds of leave and the holidays, adjust balances, record leave for anyon… |
+| [hr-announcements](plugins/hr/skills/hr-announcements/SKILL.md) | Writing announcements through the HR plugin, for HR: draft one in Markdown, give it pictures, publish it, pin it, change it, take it down or remove it. |
+| [hr](plugins/hr/skills/hr/SKILL.md) | Leave and announcements through the HR plugin, for the person you work for: request or cancel leave, read the balance, who is out and the holidays, read what HR announced; for a manager, answer and r… |
+| [messenger](plugins/messenger/skills/messenger/SKILL.md) | Keeps the console's messenger for whoever holds its role: connects Slack through one app the plugin makes, installed in each workspace that takes it, says which plugin events go to which channel, mat… |
+| [my-notifications](plugins/messenger/skills/my-notifications/SKILL.md) | Chooses what a person is told in Slack of their own work through the console's messenger: tasks given to them, their tasks moved, changed, commented or put away, decisions waiting on them, their agen… |
+
+5 skills.
+<!-- /skillcdn:catalog -->
+
 ## Install one into a console
 
 A deployment installs a plugin by building it into its image from a list and a lockfile, with no install scripts, and names the directory with `PLUGINS_DIR` ([deploy/README.md of the console, "Plugins in the image"](https://github.com/skillcdn/console/blob/main/deploy/README.md#plugins-in-the-image)). Each plugin's manifest names the consoles it runs on, `console`: `hr` needs 0.4.7 or later, and a console outside the range lists the plugin as failed with the reason. `console whoami` says which version a console is.
@@ -64,7 +80,7 @@ This repository is a shape as much as a set of plugins. Fork it, or copy one plu
 2. Rename the scope. The plugins here are `@skillcdn/console-plugin-<key>`; make them yours in each plugin's `package.json`, in `SCOPE` of `scripts/check-plugins.mjs`, in `repo` of `.changeset/config.json` and in `README.md`.
 3. Keep a permissive license. A console refuses a plugin whose license is not permissive, and the checks here hold every package a plugin bundles to one, since that is what ships.
 4. Delete the plugins you do not need, the example included once you have one of your own, and write yours at `plugins/<key>/` as [docs/guide/adding-a-plugin.md](docs/guide/adding-a-plugin.md) says. Replace [docs/roadmap.md](docs/roadmap.md) with your own plan.
-5. Rewrite this README and `SKILLCDN.md` (its `name`, `description`, `translations` and `metadata.author`) for your repository, and the "Project" section of `AGENTS.md`. The symbol at the top is SkillCDN's mark, so put your own there or none ([trademark policy](https://github.com/skillcdn/skillcdn/blob/main/TRADEMARKS.md)); keep the badge and give it your address, in its link and in its picture's URL (`https://skillcdn.ai/badge/gh/<you>/<repo>`).
+5. Rewrite this README, `SKILLCDN.md` (its `name`, `description`, `translations` and `metadata.author`) and the page it names as `start`, `docs/start.md`, for your repository, and the "Project" section of `AGENTS.md`; `pnpm exec skillcdn catalog --write README.md` writes the table of your skills. The symbol at the top is SkillCDN's mark, so put your own there or none ([trademark policy](https://github.com/skillcdn/skillcdn/blob/main/TRADEMARKS.md)); keep the badge and give it your address, in its link and in its picture's URL (`https://skillcdn.ai/badge/gh/<you>/<repo>`).
 6. Name the trusted publisher of each package you publish, once, as its first version goes out ([docs/guide/releasing.md](docs/guide/releasing.md)).
 7. Connect it at `skillcdn.ai/gh/<you>/<repo>`, so that agents read your plugins' skills and these documents there. A public repository needs no setup.
 

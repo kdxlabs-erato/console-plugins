@@ -4,6 +4,7 @@ What this repository keeps of itself, beside the plugins: how it is shaped, what
 
 | Document | What it is |
 |---|---|
+| [start.md](start.md) | The page an agent reads first, which `SKILLCDN.md` names as `start`: which skill a request leads to, the two ways the pack is read, and what the skills stand on |
 | [repository.md](repository.md) | The shape of the repository: one package per plugin, what is shared between them and what is not, how a plugin ships and is run while it is written, what the checks hold |
 | [roadmap.md](roadmap.md) | What exists, what is being built, what comes next: the plugins, one at a time |
 | [adr/](adr/README.md) | The decisions with lasting consequences, one short file each |
