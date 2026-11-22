@@ -1,7 +1,10 @@
 // The words the server module puts in front of people, in English and Korean: what a command
 // answers and what it refuses with, in the caller's language; what Slack shows, in the language
 // of whoever reads it (the person a form or a refusal is for, the requester of a thread, the
-// deciders a step asks, the route's for a channel); and the names the app takes in Slack.
+// deciders a step asks, the route's for a channel); and the names the app takes in Slack. A Korean
+// sentence that carries a name takes its particle from the console's helpers, as the console's
+// own Korean does.
+import { asObject, asSubject, asWay } from "@skillcdn/console/plugin";
 import type { Language, NoticeKind } from "../shared/contracts.js";
 
 /** The parts of a day as hr spells them, in the words a message says them in. */
@@ -495,7 +498,7 @@ const KO: ServerWords = {
     notHttps: (url) =>
       `Slack은 https로만 콘솔에 닿는데, 이 콘솔의 주소는 ${url}입니다. 배포에서 먼저 https로 서비스해야 합니다.`,
     privateAddress: (url) =>
-      `${url}은 이 컴퓨터나 사설망의 주소라 Slack이 닿을 수 없습니다. 콘솔에 먼저 공개 주소가 있어야 합니다.`,
+      `${asSubject(url)} 이 컴퓨터나 사설망의 주소라 Slack이 닿을 수 없습니다. 콘솔에 먼저 공개 주소가 있어야 합니다.`,
     noConfigToken:
       "앱 설정 토큰이 없습니다. 관리자가 콘솔의 이 플러그인 설정 페이지에 토큰과 갱신 토큰을 먼저 붙여 넣어야 합니다.",
     configTokenGone:
@@ -505,12 +508,12 @@ const KO: ServerWords = {
     callerNotMatched:
       "콘솔 계정이 Slack 계정과 연결되지 않아 보낼 사람이 없습니다. 채널을 지정하세요.",
     sealFailed: (what) =>
-      `Slack의 응답에서 콘솔이 보관할 ${what}을(를) 받지 못해 아무것도 저장하지 않았습니다. 다시 시도하세요.`,
+      `Slack의 응답에서 콘솔이 보관할 ${asObject(what)} 받지 못해 아무것도 저장하지 않았습니다. 다시 시도하세요.`,
     slackSaid: (error) => `Slack이 거절했습니다: ${error}.`,
     slackWait: (seconds) => `Slack이 ${seconds}초 기다려 달라고 했습니다. 그 뒤에 다시 시도하세요.`,
-    unknownChannel: (channel) => `앱이 볼 수 있는 채널 중에 ${channel}이(가) 없습니다.`,
+    unknownChannel: (channel) => `앱이 볼 수 있는 채널 중에 ${asSubject(channel)} 없습니다.`,
     privateNotMember: (channel) =>
-      `#${channel}은(는) 비공개 채널이고 앱이 들어가 있지 않습니다. Slack에서 먼저 앱을 채널에 초대하세요.`,
+      `${asSubject(`#${channel}`)} 비공개 채널이고 앱이 들어가 있지 않습니다. Slack에서 먼저 앱을 채널에 초대하세요.`,
     unknownRoute: "그런 경로가 없습니다.",
     unknownPerson: "콘솔에 그 로그인을 쓰는 사람이 없습니다.",
     oauthStale:
@@ -522,7 +525,7 @@ const KO: ServerWords = {
     icon: "아이콘은 Slack이 직접 가져갈 수 있는 공개 https 이미지 주소여야 합니다.",
     appNameRefused: (message) => `Slack이 앱 이름을 받지 않았습니다: ${message}`,
     botNameRefused: (message) => `Slack이 봇 이름을 받지 않았습니다: ${message}`,
-    unknownWorkspace: (team) => `앱이 설치된 워크스페이스 중에 ${team}이(가) 없습니다.`,
+    unknownWorkspace: (team) => `앱이 설치된 워크스페이스 중에 ${asSubject(team)} 없습니다.`,
     workspaceNeeded:
       "앱이 여러 워크스페이스에 설치되어 있습니다. status에 나온 대로 --workspace로 하나를 정하세요.",
     workspaceGone: (name) =>
@@ -534,10 +537,10 @@ const KO: ServerWords = {
     noPerson: "본인이 정하는 것입니다. 본인이나 본인의 에이전트로 정하세요.",
     awaitingAccept: (name) =>
       `${name}에 앱을 설치했습니다. 메신저 담당이 콘솔에서 수락하기 전에는 그곳에 아무것도 알리지 않습니다. 이 페이지는 닫아도 됩니다.`,
-    notPending: (team) => `수락을 기다리는 워크스페이스 중에 ${team}이(가) 없습니다.`,
+    notPending: (team) => `수락을 기다리는 워크스페이스 중에 ${asSubject(team)} 없습니다.`,
     busy: "그사이 앱 기록이 계속 바뀌었습니다. 다시 시도하세요.",
     noticeAt: "하루 알림 시각은 09:00처럼 HH:MM으로 씁니다.",
-    noticeBoth: (kinds) => `${kinds}을(를) 켜고 끄기를 함께 할 수 없습니다.`,
+    noticeBoth: (kinds) => `${asObject(kinds)} 켜고 끄기를 함께 할 수 없습니다.`,
   },
   said: {
     appMade: (url) =>
@@ -552,10 +555,11 @@ const KO: ServerWords = {
       `${name}에서 앱을 제거하고 그곳의 스레드를 닫았습니다. 다시 설치하면 채널 알림과 계정 연결이 돌아옵니다.`,
     workspaceSaved: (name, isDefault, projects) =>
       isDefault
-        ? `${name}이(가) 기본 워크스페이스입니다. 다른 곳에 정하지 않은 모든 프로젝트와, 여기에 정한 프로젝트 ${projects}개를 알립니다.`
+        ? `${asSubject(name)} 기본 워크스페이스입니다. 다른 곳에 정하지 않은 모든 프로젝트와, 여기에 정한 프로젝트 ${projects}개를 알립니다.`
         : `${name}에는 여기에 정한 프로젝트 ${projects}개를 알립니다.`,
-    notices: (kinds, when) => `${kinds}을(를) ${when} 알려 드립니다.`,
-    accepted: (name) => `${name}을(를) 수락했습니다. 한 시간 안에 그곳 사람들의 계정을 연결합니다.`,
+    notices: (kinds, when) => `${asObject(kinds)} ${when} 알려 드립니다.`,
+    accepted: (name) =>
+      `${asObject(name)} 수락했습니다. 한 시간 안에 그곳 사람들의 계정을 연결합니다.`,
     names: (app, bot, handle) =>
       `Slack에서 앱 이름은 "${app}", 봇 이름은 "${bot}"${handle === null ? "" : `(@${handle})`}입니다.`,
     icon: {
@@ -578,8 +582,8 @@ const KO: ServerWords = {
       `${workspace}에서 이메일로 ${matched}명을 Slack 계정과 연결했습니다. ${unmatched}명은 그곳에 계정이 없습니다.`,
     matchedOne: (name) => `${name} 님을 Slack 계정과 연결했습니다.`,
     notMatchedOne: (name) => `${name} 님의 이메일로 된 Slack 계정이 없습니다.`,
-    routeSaved: (id, channel) => `경로 ${id}: #${channel}(으)로 보냅니다.`,
-    routeRemoved: (id) => `경로 ${id}를 지웠습니다.`,
+    routeSaved: (id, channel) => `경로 ${id}: ${asWay(`#${channel}`)} 보냅니다.`,
+    routeRemoved: (id) => `경로 ${asObject(id)} 지웠습니다.`,
   },
   next: {
     address:
