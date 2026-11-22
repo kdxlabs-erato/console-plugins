@@ -508,17 +508,20 @@ describe("what stands in the way", () => {
   });
 
   it("leaves a version of HR it was not written for alone", async () => {
-    const { ctx } = setup({ hr: fakeHr({ version: "0.5.0", views: { [REQUEST]: view({}) } }) });
+    const { ctx } = setup({ hr: fakeHr({ version: "0.6.0", views: { [REQUEST]: view({}) } }) });
     await connected(ctx);
     await onLeaveEvent(ctx.as(CONSOLE), event("leave-requested"));
-    expect(ctx.all("deliveries")[0]?.data.note).toBe("outside:0.5.0");
+    expect(ctx.all("deliveries")[0]?.data.note).toBe("outside:0.6.0");
   });
 
-  it("reads HR 0.4, which moved to console 0.5 and kept its contract", async () => {
+  it.each([
+    ["0.4.0", "console 0.5"],
+    ["0.5.0", "console 0.6"],
+  ])("reads HR %s, which moved to %s and kept its contract", async (version) => {
     const slack = fakeSlack();
     const { ctx } = setup({
       slack,
-      hr: fakeHr({ version: "0.4.0", views: { [REQUEST]: view({}) } }),
+      hr: fakeHr({ version, views: { [REQUEST]: view({}) } }),
     });
     await connected(ctx);
     await linked(ctx, MINSU, "U0MINSU01");

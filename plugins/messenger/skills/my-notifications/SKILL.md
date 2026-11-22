@@ -30,7 +30,7 @@ The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `ch
 
 ## What to know
 
-- The time of the day's message is `HH:MM` in the workspace's time zone, which `notices` says; the message goes within five minutes after (six on a console before 0.5.3).
+- The time of the day's message is `HH:MM` in the workspace's time zone, which `notices` says; the message goes within five minutes after.
 - A message goes in the Slack workspace the project is told in where the person has an account there, else the default one, else another they have one in. `notices` lists the workspaces they have an account in; none means nothing reaches them, and the usual reason is that their address in Slack is not the one the console knows for them.
 - A project is told only where the messenger is placed on it; `project-notices` says which workspace it is told in.
 - A message says what happened first, then who did it, and under it the task or the decision by its name, which is the link to it on the console. The day's message says each task, decision or agent account once, with everything that happened to it since the last, what waits on the person first.

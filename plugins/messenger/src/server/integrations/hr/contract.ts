@@ -16,9 +16,10 @@ export const HR = "hr";
 /**
  * The versions of HR whose contract this module reads (ADR-0010): 0.3.0 changed how HR cancels
  * approved leave, kept its events and option keys and only added to its api, so it is read as 0.2;
- * 0.4.0 moved to console 0.5 and changed nothing of its contract, so it is read as 0.3.
+ * 0.4.0 moved to console 0.5 and 0.5.0 to console 0.6, each changing nothing of its contract, so
+ * both are read as 0.3.
  */
-export const HR_VERSIONS = ">=0.2.0 <0.5.0";
+export const HR_VERSIONS = ">=0.2.0 <0.6.0";
 /** The role the messenger asks of HR, to read a request whole for its thread. */
 export const HR_ROLE = "hr";
 export const HR_CAPABILITY = `plugins:${HR}`;
