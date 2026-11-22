@@ -1,5 +1,15 @@
 # @skillcdn/console-plugin-hr
 
+## 0.5.0
+
+### Minor Changes
+
+- [`008c31b`](https://github.com/skillcdn/console-plugins/commit/008c31bb0bb72960c27b16da9470b7d3ec063c41) Thanks [@samo-lucid](https://github.com/samo-lucid)! - Breaking: built for console 0.6.0 or later, and for no console of the 0.5 line. Console 0.6.0 begins a line of its own and takes no plugin built for the one before, so HR 0.4 is listed as failed on it ("the plugin is built for a console >=0.5.0 <0.6.0"), its pages and commands gone until this version is installed; and a console of the 0.5 line refuses this one alike. Install it in the release that moves the console. Nothing of what HR keeps, does or answers other plugins changed: its records stay at data version 3, and the messenger 0.6 reads it as it read 0.4.
+
+### Patch Changes
+
+- [`a033dc9`](https://github.com/skillcdn/console-plugins/commit/a033dc97d5b54dba94d3e132fc63e61663e19b3f) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A Korean sentence that carries a name writes its particle in the one form the name takes, as the console's own Korean does beside it: "휴가 종류 sick을 저장했습니다", "규정 kr-fiscal-year를 저장했습니다", "메신저를 통해 신청", where both forms stood, "을(를)". A sentence that took a name as its topic says it another way: "김민수가 2026-12-31에 퇴직합니다", "병가에는 사유를 적어야 합니다".
+
 ## 0.4.2
 
 ### Patch Changes
