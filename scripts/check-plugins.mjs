@@ -14,7 +14,9 @@
 //      its own: every colour is a console token or comes with one of its classes (PRODUCT.md);
 //      what else its rules may say, and the console classes its sources name, is check-styles.mjs's;
 //   6. every link a Markdown file of the repository makes to a file of the repository resolves;
-//   7. every plugin is listed in the root README's table and in the roadmap.
+//   7. every plugin is listed in the root README's table and in the roadmap;
+//   8. no Korean sentence of a plugin's sources writes a particle in both forms, "을(를)": the
+//      console's asObject, asSubject and asWay write the one its word takes.
 // Dependency-free but for the console's own manifest parser, which the root installs. Part of
 // `pnpm check`. A changed meaning is not caught here: a change to a plugin re-reads its README
 // and its skills by hand (AGENTS.md, documentation protocol).
@@ -138,6 +140,9 @@ function classesIn(css) {
 
 /** A colour written out, as a hex value or a colour function, where a token would give it. */
 const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/;
+
+/** A Korean particle written in both of its forms, the second in brackets: "을(를)", "(으)로". */
+const BOTH_FORMS = /[을를이가은는]\([을를이가은는]\)|\(으\)로/u;
 
 /** The lines of a stylesheet that write a colour out, by number, comments aside. */
 function colourLines(css) {
@@ -410,6 +415,25 @@ for (const key of plugins) {
       for (const line of colourLines(css)) {
         fail(file, `writes a colour on line ${line}; take it from the console's tokens or classes`);
       }
+    }
+  }
+
+  // 8. The Korean particles, in the sources the bundles are built from.
+  if (isDirectory(`${dir}/src`)) {
+    for (const file of walk(`${dir}/src`)) {
+      if (!file.endsWith(".ts") || file.endsWith(".test.ts")) {
+        continue;
+      }
+      read(file)
+        .split(/\r?\n/)
+        .forEach((line, index) => {
+          if (BOTH_FORMS.test(line)) {
+            fail(
+              file,
+              `writes a particle in both forms on line ${index + 1}; take the one its word takes from asObject, asSubject or asWay of @skillcdn/console/plugin (or /plugin/web), or say the name otherwise`,
+            );
+          }
+        });
     }
   }
 
