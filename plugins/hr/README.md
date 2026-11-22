@@ -205,4 +205,4 @@ The editor is ProseMirror, in a file of its own that only opening it loads, so t
 ## Not yet
 
 - Attendance (working time, absences, check-in and check-out) and the people's records, the plugin's next features, under the same roles and records; sick leave accrued by hours worked, as US state laws have it, waits for attendance.
-- Leave by the hour (Korea's 2027 rule) and hours for part-time schedules, blackout spans, a file attached to a request (a medical certificate), a document on the board at year end: on the roadmap's open points, decided with the person.
+- Leave by the hour (Korea's 2027 rule) and hours for part-time schedules, blackout spans, a file attached to a request (a medical certificate), a document on the board at year end: under Undecided on the roadmap, decided with the person.
