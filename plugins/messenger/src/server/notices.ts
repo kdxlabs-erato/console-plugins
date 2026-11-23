@@ -9,6 +9,7 @@
 // another they have one in (ADR-0014); at once, or in one message a day at a time of the
 // workspace's zone. Chosen on a page of the messenger's and through their agent, with the command
 // `notify` and the query `notices`; each message at once has a button that turns its kind off.
+// Whoever never chose is told of their agent accounts alone (ADR-0017).
 import {
   arg,
   defineCommand,

@@ -276,14 +276,18 @@ export const NOTICE_KINDS = [
 ] as const;
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
 
-/** The kinds on for whoever chose nothing yet. */
+/**
+ * The kinds on for whoever chose nothing yet (ADR-0017): their agent accounts alone, which say
+ * that something stopped and needs them. What happens to a task, and a decision that waits, is
+ * told to whoever turned its kind on.
+ */
 export const NOTICE_DEFAULTS: Readonly<Record<NoticeKind, boolean>> = {
-  assigned: true,
-  moved: true,
+  assigned: false,
+  moved: false,
   changed: false,
-  commented: true,
+  commented: false,
   archived: false,
-  decisions: true,
+  decisions: false,
   agents: true,
 };
 

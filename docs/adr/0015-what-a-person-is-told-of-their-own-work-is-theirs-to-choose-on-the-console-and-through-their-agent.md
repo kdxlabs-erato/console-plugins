@@ -1,6 +1,6 @@
 # ADR-0015: What a person is told of their own work is theirs to choose, on the console and through their agent
 
-- Status: Accepted
+- Status: Accepted; the defaults of point 2 amended by [ADR-0017](0017-nobody-is-told-of-their-own-work-until-they-turn-it-on-but-for-their-agent-accounts.md), under which whoever never chose is told of their agent accounts alone
 - Date: 2026-11-15
 
 ## Context

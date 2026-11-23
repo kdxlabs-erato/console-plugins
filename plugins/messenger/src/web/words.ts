@@ -471,7 +471,7 @@ const EN: Words = {
     unmute: "Turn on",
     defaults: "Back to the defaults",
     defaultsHint:
-      "Tasks given to you, your tasks moved, comments on them, decisions waiting on you and your agent accounts, as they happen.",
+      "Your agent accounts alone, as it happens. Everything else stays off until you turn it on.",
     reset: "Reset",
   },
   project: {
@@ -795,8 +795,7 @@ const KO: Words = {
     muted: "끈 프로젝트",
     unmute: "켜기",
     defaults: "기본값으로",
-    defaultsHint:
-      "맡겨진 작업, 내 작업의 상태 이동과 댓글, 나를 기다리는 결정, 내 에이전트 계정을 그때그때 받습니다.",
+    defaultsHint: "내 에이전트 계정만 그때그때 받습니다. 나머지는 직접 켜기 전까지 받지 않습니다.",
     reset: "되돌리기",
   },
   project: {

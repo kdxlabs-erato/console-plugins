@@ -2,7 +2,7 @@
 // is about, never whoever made it, as each chose, in their language and in a workspace they have
 // an account in, the project's first; once a day where they chose so; turned off from the message
 // itself; and the choice made on the page and through their agent with `notify` and `notices`.
-import type { PluginHookEvent } from "@skillcdn/console/plugin";
+import type { PluginCaller, PluginHookEvent } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
 import type { NoticesView, ProjectNoticesView } from "../shared/contracts.js";
 import {
@@ -55,6 +55,24 @@ function task(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The kinds of the board these tests tell of, which nobody is told of until they turn them on. */
+const BOARD = ["assigned", "moved", "commented", "decisions"] as const;
+const MEMBER_HANA: PluginCaller = {
+  kind: "person",
+  person: { id: HANA.id, login: HANA.login, name: HANA.name, language: "ko", admin: false },
+  agent: null,
+  roles: ["member"],
+  run: null,
+  project: null,
+};
+
+/** Minsu and Jihye turn those kinds on, as whoever wants to be told of their tasks does. */
+async function asked(ctx: ReturnType<typeof setup>["ctx"]): Promise<void> {
+  for (const member of [MEMBER_MINSU, MEMBER_JIHYE]) {
+    await notify.run(ctx.as(member), { on: [...BOARD] });
+  }
+}
+
 let sequence = 0;
 function event(kind: string, data: Record<string, unknown>, actor = HANA): PluginHookEvent {
   sequence += 1;
@@ -77,6 +95,8 @@ async function ready(
     readonly tasks?: (number: number) => Record<string, unknown>;
     readonly now?: () => Date;
     readonly slack?: ReturnType<typeof fakeSlack>;
+    /** Whether Minsu and Jihye turned the board's kinds on; they did unless a test says not. */
+    readonly chosen?: boolean;
   } = {},
 ) {
   const slack = options.slack ?? fakeSlack();
@@ -114,6 +134,9 @@ async function ready(
   await connected(made.ctx);
   await linked(made.ctx, MINSU, "U0MINSU01");
   await linked(made.ctx, JIHYE, "U0JIHYE01");
+  if (options.chosen !== false) {
+    await asked(made.ctx);
+  }
   return { ...made, hook: made.ctx.as(CONSOLE) };
 }
 
@@ -269,7 +292,8 @@ describe("a task's events", () => {
       note: "not_connected",
     });
     const { hook, slack, ctx } = await ready({ task: { owner: brief(HANA), workers: [] } });
-    // A comment, which Hana is told of unless she says otherwise; she has no account in Slack.
+    // A comment, which Hana chose to be told of; she has no account in Slack.
+    await notify.run(ctx.as(MEMBER_HANA), { on: ["commented"] });
     await onOwnWork(
       hook,
       event("task.commented", { taskId: task().id, number: 12, excerpt: "Hi" }, JIHYE),
@@ -742,6 +766,7 @@ describe("a delivery tried again", () => {
     await connected(made.ctx);
     await linked(made.ctx, MINSU, "U0MINSU01");
     await linked(made.ctx, JIHYE, "U0JIHYE01");
+    await asked(made.ctx);
     const hook = made.ctx.as(CONSOLE);
     const once = event("task.created", { taskId: task().id, number: 12 });
     await expect(onOwnWork(hook, once)).rejects.toBeDefined();
@@ -761,7 +786,7 @@ describe("a delivery tried again", () => {
 
 describe("notify and notices", () => {
   it("answers the defaults to whoever never chose, and what they chose since", async () => {
-    const { ctx } = await ready();
+    const { ctx } = await ready({ chosen: false });
     const before = (await notices.run(ctx, {})) as NoticesView;
     expect(before).toMatchObject({
       chosen: false,
@@ -771,28 +796,63 @@ describe("notify and notices", () => {
       timeZone: "Asia/Seoul",
       accounts: [{ teamId: TEAM, teamName: "Acme" }],
     });
-    expect(before.kinds).toEqual({
-      assigned: true,
-      moved: true,
+    // Their agent accounts alone, which warn of something stopped; the board's kinds wait to be asked for.
+    const defaults = {
+      assigned: false,
+      moved: false,
       changed: false,
-      commented: true,
+      commented: false,
       archived: false,
-      decisions: true,
+      decisions: false,
       agents: true,
-    });
+    };
+    expect(before.kinds).toEqual(defaults);
     const said = await notify.run(ctx, {
-      off: ["moved"],
-      on: ["archived"],
+      off: ["agents"],
+      on: ["assigned", "archived"],
       mute: [{ id: PROJECT.id, key: PROJECT.key, name: "Web" }],
     });
     expect(said.text).toContain("나에게 맡겨진 작업");
+    expect(said.text).not.toContain("내 에이전트 계정");
     const after = (await notices.run(ctx, {})) as NoticesView;
-    expect(after.kinds.moved).toBe(false);
-    expect(after.kinds.archived).toBe(true);
+    expect(after.chosen).toBe(true);
+    expect(after.kinds).toEqual({ ...defaults, assigned: true, archived: true, agents: false });
     expect(after.mutedProjects).toEqual([{ id: PROJECT.id, key: "WEB", name: "Web" }]);
     expect(ctx.all("preferences")[0]?.data.personId).toBe(MINSU.id);
     await notify.run(ctx, { reset: true });
-    expect(((await notices.run(ctx, {})) as NoticesView).kinds.moved).toBe(true);
+    expect(((await notices.run(ctx, {})) as NoticesView).kinds).toEqual(defaults);
+  });
+
+  it("tells whoever never chose of their agent accounts alone, and of the board once they turn a kind on", async () => {
+    const { hook, slack, ctx } = await ready({ chosen: false });
+    const about = { taskId: task().id, number: 12 };
+    const decision = { decisionId: DECISION, question: "Ship it?" };
+    // Everything the board says of a task of theirs, and a decision waiting on them.
+    await onOwnWork(hook, event("task.created", about));
+    await onOwnWork(hook, event("task.moved", { ...about, from: "ready", to: "in_review" }));
+    await onOwnWork(
+      hook,
+      event("task.updated", { ...about, fields: ["title", "workers"], workersAdded: [JIHYE.id] }),
+    );
+    await onOwnWork(hook, event("task.commented", { ...about, excerpt: "Hi" }));
+    await onOwnWork(hook, event("task.archived", about));
+    await onOwnWork(hook, event("decision.raised", decision));
+    expect(slack.calls).toHaveLength(0);
+    expect(ctx.all("waiting")).toHaveLength(0);
+    expect(ctx.all("deliveries").map((line) => line.data.note)).toEqual(Array(6).fill("nobody"));
+    // Nothing is written for them either: they stand on the defaults until they choose.
+    expect(ctx.all("preferences")).toHaveLength(0);
+    // An agent account of theirs that failed is told unasked.
+    await onOwnWork(
+      hook,
+      event("agent.state_changed", { login: "bot-runner", state: "failed", was: "running" }),
+    );
+    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
+    // Minsu turns decisions on, and is told of the next; Jihye, who chose nothing, is not.
+    await notify.run(ctx, { on: ["decisions"] });
+    await onOwnWork(hook, event("decision.raised", decision));
+    expect(toWhom(slack)).toEqual(["U0MINSU01", "U0MINSU01"]);
+    expect(blocksOf(slack.of("chat.postMessage").at(-1))).toContain(`/decisions/${DECISION}`);
   });
 
   it("refuses a time that is none, a kind both on and off, the console itself, and whoever holds no role", async () => {

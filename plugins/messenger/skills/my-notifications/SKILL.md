@@ -26,7 +26,7 @@ The messenger tells each person, in a direct message in Slack, of what happens t
 | Go back to the defaults | `console plugin messenger notify --reset` |
 | See which workspace a project is told in | `console plugin messenger project-notices <project>` |
 
-The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `changed` (a task of yours changed: its title, body or days), `commented` (a comment on a task of yours), `archived` (a task of yours put away), `decisions` (a decision waiting on you), `agents` (your agent accounts stopping, refused, failing, and running again; one not heard from for half an hour, with what to look at, and heard from again). Unless chosen: `assigned`, `moved`, `commented`, `decisions` and `agents` on, the rest off, at once, your own agents not counted.
+The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `changed` (a task of yours changed: its title, body or days), `commented` (a comment on a task of yours), `archived` (a task of yours put away), `decisions` (a decision waiting on you), `agents` (your agent accounts stopping, refused, failing, and running again; one not heard from for half an hour, with what to look at, and heard from again). Unless chosen: `agents` on and every other kind off, at once, your own agents not counted. Nothing of a task or a decision is told until its kind is turned on.
 
 ## What to know
 
@@ -35,6 +35,7 @@ The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `ch
 - A project is told only where the messenger is placed on it; `project-notices` says which workspace it is told in.
 - A message says what happened first, then who did it, and under it the task or the decision by its name, which is the link to it on the console. The day's message says each task, decision or agent account once, with everything that happened to it since the last, what waits on the person first.
 - A message sent at once has a button that turns its kind off; the page and `notify` turn it on again.
+- An agent account is woken by the console itself for a comment on a task it owns or works on, a decision addressed to it and a ready task it is at work on. Turning `commented`, `decisions` or `assigned` on tells it of those a second time, and each message wakes it where its runner listens to Slack.
 
 ## Rules
 
