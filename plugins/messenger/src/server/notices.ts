@@ -1,7 +1,7 @@
 // What a person is told of their own work, as they choose (ADR-0015): the console's events of the
 // projects the messenger is placed on, a task given to them, one they own moved, one of theirs
 // changed, commented or put away, a decision waiting on them, and to a manager their agent
-// accounts stopping or running again; each told to the person it is about, never whoever made the
+// accounts stopping, long unheard or running again; each told to the person it is about, never whoever made the
 // change, in their language. A message says what happened first, in a few words, then the thing,
 // its name the link to it on the console, then who did it; a day's message says each thing once,
 // with everything that happened to it, what waits on the person first. In a direct message, in the
@@ -35,6 +35,8 @@ import {
   type HappenedData,
   type PreferenceData,
   preferences,
+  type SilenceData,
+  silences,
   type WaitingData,
   waiting,
 } from "./collections.js";
@@ -75,6 +77,17 @@ const DAY_QUOTES = { count: 2, each: 140 } as const;
 const STATES_AT_MOST = 4;
 /** The state a task waits in for a person's look at what was done. */
 const IN_REVIEW = "in_review";
+/** How an agent account stands whose runner the console does not hear from, and one it does. */
+const UNHEARD = "unheard";
+const RUNNING = "running";
+/**
+ * How long an agent account goes unheard before its manager is told, counted from the console
+ * saying so, and how long it is heard from again before that is told: a machine that wakes for
+ * a few minutes in its sleep, or is off the network as long, tells nobody anything. The words
+ * say the first (`agentStates.unheard`).
+ */
+const UNHEARD_AFTER_MS = 30 * 60_000;
+const BACK_AFTER_MS = 10 * 60_000;
 
 type PreferenceRecord = PluginRecord<PreferenceData>;
 
@@ -507,6 +520,12 @@ function factsOf(words: NoticeWords, lines: readonly Line[]): string[] {
   return facts;
 }
 
+/** What to look at where an agent account stands as it does now, or nothing. */
+function hintOf(words: NoticeWords, lines: readonly Line[]): string | null {
+  const stands = lines.findLast((line) => line.kind === "agents")?.what.to ?? null;
+  return stands === null ? null : (words.agentHints[stands] ?? null);
+}
+
 /** Who did what happened to a thing: one or two by name, more as the first and a count. */
 function whoOf(words: NoticeWords, lines: readonly Line[]): string {
   const names = [
@@ -526,8 +545,9 @@ function labelOf(what: Happened): string {
 
 /**
  * A thing as Slack's markup, to be read at a glance: what happened in bold, and who did it; under
- * it the thing, its name the link to it on the console; under that what was said, a comment's
- * words or an agent account's own, quoted, the last few of them.
+ * it the thing, its name the link to it on the console, and what to look at where an agent
+ * account stands so; under that what was said, a comment's words or an agent account's own,
+ * quoted, the last few of them.
  */
 function entryMarkup(
   language: Language,
@@ -539,6 +559,7 @@ function entryMarkup(
   const facts = safe(factsOf(words, entry.lines).join(" · "));
   const last = entry.lines.at(-1)?.what;
   const label = last === undefined ? "" : labelOf(last);
+  const hint = hintOf(words, entry.lines);
   const said = entry.lines
     .map((line) => line.what.excerpt)
     .filter((excerpt) => excerpt.length > 0)
@@ -547,6 +568,7 @@ function entryMarkup(
   return [
     who.length === 0 ? `*${facts}*` : `*${facts}* · ${safe(who)}`,
     entry.url === null ? safe(label) : link(entry.url, label),
+    ...(hint === null ? [] : [safe(hint)]),
     ...said,
   ].join("\n");
 }
@@ -556,8 +578,11 @@ function sentenceOf(language: Language, line: Line): string {
   const words = serverWords(language).notice;
   const who = whoOf(words, [line]);
   const facts = factsOf(words, [line]).join(" · ");
+  const hint = hintOf(words, [line]);
   const said = line.what.excerpt.length === 0 ? "" : ` — ${line.what.excerpt}`;
-  return `${facts}${who.length === 0 ? "" : ` · ${who}`}: ${labelOf(line.what)}${said}`;
+  return `${facts}${who.length === 0 ? "" : ` · ${who}`}: ${labelOf(line.what)}${
+    hint === null ? "" : ` — ${hint}`
+  }${said}`;
 }
 
 /** What the console's task and decision events come to, to whom. */
@@ -678,8 +703,72 @@ async function noticesOfBoard(
 /** The fields of a task whose change is told: its days, its title, its body. */
 const CHANGED = ["title", "body", "startsOn", "dueOn"];
 
-/** An agent account's states its manager is told of: stopping, refused, failing, and running again. */
+/**
+ * An agent account's states its manager is told of as they come: stopping, refused, failing, and
+ * running again. One unheard is told by the job `unheard`, once it lasted.
+ */
 const AGENT_TOLD = new Set(["stopped", "refused", "failed"]);
+
+/** The agent account an event names by its login, or nobody. */
+async function agentOf(ctx: PluginContext, login: string) {
+  return (await ctx.console.people.list({ q: login })).find(
+    (person) => person.login.toLowerCase() === login.toLowerCase(),
+  );
+}
+
+async function silenceOf(
+  ctx: PluginContext,
+  personId: string,
+): Promise<PluginRecord<SilenceData> | null> {
+  const page = await ctx.records(silences).list({ where: { personId }, limit: 1 });
+  return page.items[0] ?? null;
+}
+
+/**
+ * Follows an agent account into its silence and out of it, whether or not Slack is connected: one
+ * unheard is kept from when the console said so; one running again is put away where nobody was
+ * told, and kept as back where its manager was, until it stayed so; one unheard again before
+ * that is silent as it was; and one that stopped, was refused or failed is put away, its manager
+ * being told of that as it comes. Each step reads the record first, so that a delivery repeated
+ * changes nothing.
+ */
+async function followSilence(ctx: PluginContext, event: PluginHookEvent): Promise<void> {
+  const data = (event.data ?? {}) as Record<string, unknown>;
+  const state = typeof data.state === "string" ? data.state : null;
+  const login = typeof data.login === "string" ? data.login : null;
+  if (state === null || login === null) {
+    return;
+  }
+  const account = await agentOf(ctx, login);
+  if (account === undefined) {
+    return;
+  }
+  const found = await silenceOf(ctx, account.id);
+  const at = (Number.isNaN(Date.parse(event.at)) ? ctx.now() : new Date(event.at)).toISOString();
+  if (state === UNHEARD) {
+    if (found === null) {
+      await ctx.records(silences).create({
+        personId: account.id,
+        since: at,
+        toldAt: null,
+        backAt: null,
+      });
+    } else if (found.data.backAt !== null) {
+      await ctx.records(silences).update(found.id, { backAt: null });
+    }
+    return;
+  }
+  if (found === null) {
+    return;
+  }
+  if (state === RUNNING && found.data.toldAt !== null) {
+    if (found.data.backAt === null) {
+      await ctx.records(silences).update(found.id, { backAt: at });
+    }
+    return;
+  }
+  await ctx.records(silences).archive(found.id);
+}
 
 /** What an agent account standing otherwise comes to: a line to whoever it reports to. */
 async function noticesOfAgent(ctx: PluginContext, event: PluginHookEvent): Promise<Notice[]> {
@@ -689,13 +778,11 @@ async function noticesOfAgent(ctx: PluginContext, event: PluginHookEvent): Promi
   const login = typeof data.login === "string" ? data.login : null;
   const told =
     (state !== null && AGENT_TOLD.has(state)) ||
-    (state === "running" && was !== null && AGENT_TOLD.has(was));
+    (state === RUNNING && was !== null && AGENT_TOLD.has(was));
   if (!told || login === null || state === null) {
     return [];
   }
-  const account = (await ctx.console.people.list({ q: login })).find(
-    (person) => person.login.toLowerCase() === login.toLowerCase(),
-  );
+  const account = await agentOf(ctx, login);
   const managerId = account?.managerId ?? null;
   if (account === undefined || managerId === null) {
     return [];
@@ -777,6 +864,49 @@ async function directly(
 }
 
 /**
+ * Tells a notice to its person as they chose: at once, or kept for the day's message. Answers
+ * whether it was, which it is not for a kind or a project turned off, or no account in a workspace
+ * the app is in.
+ */
+async function tellChosen(
+  ctx: PluginContext,
+  notice: Notice,
+  choice: PreferenceData,
+  connected: readonly ConnectionRecord[],
+  origin: string | null,
+  fallbackLanguage: Language,
+): Promise<boolean> {
+  if (!(choice.kinds[notice.kind] ?? NOTICE_DEFAULTS[notice.kind])) {
+    return false;
+  }
+  if (notice.projectId !== null && choice.mutedProjects.includes(notice.projectId)) {
+    return false;
+  }
+  const account = whereTold(connected, await accountsOf(ctx, notice.personId), notice.projectId);
+  if (account === null) {
+    return false;
+  }
+  const language = await languageOfPerson(ctx, notice.personId, fallbackLanguage);
+  const sentence = sentenceOf(language, notice);
+  if (choice.cadence === "daily") {
+    await ctx.records(waiting).create(
+      {
+        personId: notice.personId,
+        kind: notice.kind,
+        text: [...sentence].slice(0, 600).join(""),
+        url: notice.url,
+        at: ctx.now().toISOString(),
+        what: notice.what,
+      },
+      { owner: notice.personId },
+    );
+  } else {
+    await directly(ctx, account, fallback(sentence), noticeBlocks(language, notice, origin));
+  }
+  return true;
+}
+
+/**
  * Tells each notice to its person as they chose: passed over for whoever made the change (unless
  * their own agents count for them and an agent made it), a kind or a project turned off, or no
  * account in a workspace the app is in; at once, or kept for the day's message. Each one told is
@@ -807,34 +937,9 @@ async function tellAll(
     if (notice.personId === actorId && !(byAgent && choice.ownAgents)) {
       continue;
     }
-    if (!(choice.kinds[notice.kind] ?? NOTICE_DEFAULTS[notice.kind])) {
-      continue;
+    if (await tellChosen(ctx, notice, choice, connected, origin, fallbackLanguage)) {
+      told.push(once);
     }
-    if (notice.projectId !== null && choice.mutedProjects.includes(notice.projectId)) {
-      continue;
-    }
-    const account = whereTold(connected, await accountsOf(ctx, notice.personId), notice.projectId);
-    if (account === null) {
-      continue;
-    }
-    const language = await languageOfPerson(ctx, notice.personId, fallbackLanguage);
-    const sentence = sentenceOf(language, notice);
-    if (choice.cadence === "daily") {
-      await ctx.records(waiting).create(
-        {
-          personId: notice.personId,
-          kind: notice.kind,
-          text: [...sentence].slice(0, 600).join(""),
-          url: notice.url,
-          at: ctx.now().toISOString(),
-          what: notice.what,
-        },
-        { owner: notice.personId },
-      );
-    } else {
-      await directly(ctx, account, fallback(sentence), noticeBlocks(language, notice, origin));
-    }
-    told.push(once);
   }
 }
 
@@ -865,6 +970,9 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
       : typeof data.decisionId === "string"
         ? data.decisionId.slice(0, 64)
         : null;
+  if (event.kind === "console:agent.state_changed") {
+    await followSilence(ctx, event);
+  }
   const connected = await connectionsOf(ctx);
   if (connected.length === 0) {
     await deliver(ctx, event, "skipped", "not_connected", thing);
@@ -1139,5 +1247,85 @@ export const day: JobDefinition = {
   every: "PT5M",
   async run(ctx) {
     await sendDays(ctx);
+  },
+};
+
+/**
+ * Tells a manager of an agent account that has gone unheard for half an hour, once, with what to
+ * look at, and of one heard from again for ten minutes after that, once; as they chose, in the
+ * kind of their agent accounts, at once or in the day's message. An account that left, or reports
+ * to nobody, is put away. A message Slack did not take is tried at the next run. Most runs read
+ * what is kept, find nothing due and write nothing.
+ */
+async function tellSilences(ctx: PluginContext): Promise<void> {
+  const now = ctx.now();
+  const lasted = (since: string) => now.getTime() - Date.parse(since);
+  const due = (
+    await everyOne<SilenceData>((after) =>
+      ctx.records(silences).list({ limit: 200, ...(after === undefined ? {} : { after }) }),
+    )
+  ).filter(({ data }) =>
+    data.backAt !== null
+      ? lasted(data.backAt) >= BACK_AFTER_MS
+      : data.toldAt === null && lasted(data.since) >= UNHEARD_AFTER_MS,
+  );
+  if (due.length === 0) {
+    return;
+  }
+  const connected = await connectionsOf(ctx);
+  if (connected.length === 0) {
+    return;
+  }
+  const workspace = await ctx.console.workspace();
+  const fallbackLanguage = workspace.languageSet ? languageOf(workspace.language) : "en";
+  for (const record of due) {
+    const back = record.data.backAt !== null;
+    const account = await ctx.console.people.get(record.data.personId);
+    const managerId = account?.managerId ?? null;
+    if (account === null || account.status !== "active" || managerId === null) {
+      await ctx.records(silences).archive(record.id);
+      continue;
+    }
+    try {
+      await tellChosen(
+        ctx,
+        {
+          personId: managerId,
+          kind: "agents",
+          projectId: null,
+          url: null,
+          what: {
+            ...NOTHING,
+            title: clean(account.handle ?? account.name ?? account.login, 200),
+            from: back ? UNHEARD : null,
+            to: back ? RUNNING : UNHEARD,
+          },
+        },
+        await choiceOf(ctx, managerId),
+        connected,
+        workspace.url,
+        fallbackLanguage,
+      );
+    } catch (error) {
+      ctx.log.warn("an agent account's silence was not told", {
+        code: error instanceof SlackError ? error.code : null,
+      });
+      continue;
+    }
+    // Marked whether or not the manager chose to be told: a silence is told once, or never.
+    if (back) {
+      await ctx.records(silences).archive(record.id);
+    } else {
+      await ctx.records(silences).update(record.id, { toldAt: now.toISOString() });
+    }
+  }
+}
+
+export const unheard: JobDefinition = {
+  about:
+    "Tells a manager of an agent account unheard for half an hour, and of one heard from again after.",
+  every: "PT5M",
+  async run(ctx) {
+    await tellSilences(ctx);
   },
 };

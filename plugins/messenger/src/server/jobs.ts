@@ -3,11 +3,12 @@
 // each workspace checked that it still has the app, and the people of a workspace installed since
 // matched the first time; every day the people matched again in every workspace, so that a new
 // member, a left one or a changed account is caught where no event said so; and every five
-// minutes the message of the day sent to each person who chose one, once their time has come.
+// minutes the message of the day sent to each person who chose one, once their time has come,
+// and a manager told of an agent account that has gone unheard for long, or is heard from again.
 import type { JobDefinition, PluginContext } from "@skillcdn/console/plugin";
 import { keepConnection } from "./connection.js";
 import { matchEveryone } from "./matching.js";
-import { day } from "./notices.js";
+import { day, unheard } from "./notices.js";
 import { connectionsOf, noteTeamProblem } from "./store.js";
 
 async function matchWhenConnected(ctx: PluginContext, onlyFirst: boolean): Promise<void> {
@@ -44,4 +45,4 @@ export const match: JobDefinition = {
   },
 };
 
-export const jobs: Readonly<Record<string, JobDefinition>> = { keep, match, day };
+export const jobs: Readonly<Record<string, JobDefinition>> = { keep, match, day, unheard };

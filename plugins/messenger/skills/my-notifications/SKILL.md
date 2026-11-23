@@ -26,7 +26,7 @@ The messenger tells each person, in a direct message in Slack, of what happens t
 | Go back to the defaults | `console plugin messenger notify --reset` |
 | See which workspace a project is told in | `console plugin messenger project-notices <project>` |
 
-The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `changed` (a task of yours changed: its title, body or days), `commented` (a comment on a task of yours), `archived` (a task of yours put away), `decisions` (a decision waiting on you), `agents` (your agent accounts stopping, refused, failing, and running again). Unless chosen: `assigned`, `moved`, `commented`, `decisions` and `agents` on, the rest off, at once, your own agents not counted.
+The kinds: `assigned` (a task given to you), `moved` (a task you own moved), `changed` (a task of yours changed: its title, body or days), `commented` (a comment on a task of yours), `archived` (a task of yours put away), `decisions` (a decision waiting on you), `agents` (your agent accounts stopping, refused, failing, and running again; one not heard from for half an hour, with what to look at, and heard from again). Unless chosen: `assigned`, `moved`, `commented`, `decisions` and `agents` on, the rest off, at once, your own agents not counted.
 
 ## What to know
 

@@ -5,7 +5,16 @@
 import type { PluginHookEvent } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
 import type { NoticesView, ProjectNoticesView } from "../shared/contracts.js";
-import { day, dueDay, notices, notify, onOwnWork, projectNotices, slackEndpoint } from "./index.js";
+import {
+  day,
+  dueDay,
+  notices,
+  notify,
+  onOwnWork,
+  projectNotices,
+  slackEndpoint,
+  unheard,
+} from "./index.js";
 import {
   CONSOLE,
   connected,
@@ -67,9 +76,10 @@ async function ready(
     /** What each task is, by its number, where a test tells of several. */
     readonly tasks?: (number: number) => Record<string, unknown>;
     readonly now?: () => Date;
+    readonly slack?: ReturnType<typeof fakeSlack>;
   } = {},
 ) {
-  const slack = fakeSlack();
+  const slack = options.slack ?? fakeSlack();
   const made = setup({
     slack,
     caller: MEMBER_MINSU,
@@ -317,6 +327,199 @@ describe("decisions and agent accounts", () => {
       event("agent.state_changed", { login: "bot-runner", state: "running", was: "unheard" }),
     );
     expect(toWhom(slack)).toHaveLength(2);
+  });
+});
+
+describe("an agent account unheard", () => {
+  const MINUTE = 60_000;
+  const RUNNER = "0199a000-0000-7000-8000-0000000000a9";
+
+  /** A clock a test moves, the runner's state said at its time, and the job run at it. */
+  async function watched(options: { readonly slack?: ReturnType<typeof fakeSlack> } = {}) {
+    let at = NOW;
+    const made = await ready({ now: () => at, ...options });
+    return {
+      ...made,
+      after: (minutes: number) => {
+        at = new Date(at.getTime() + minutes * MINUTE);
+      },
+      stands: (state: string, was: string, attempt = 1) =>
+        onOwnWork(made.hook, {
+          ...event("agent.state_changed", { login: "bot-runner", state, was }),
+          at: at.toISOString(),
+          attempt,
+        }),
+      look: () => unheard.run(made.hook),
+      silences: () => made.ctx.all("silences").filter((record) => record.archivedAt === null),
+    };
+  }
+
+  it("tells the manager once after half an hour, with what to look at, and once when it is back for ten minutes", async () => {
+    const { slack, after, stands, look, silences } = await watched();
+    await stands("unheard", "running");
+    await look();
+    after(29);
+    await look();
+    expect(toWhom(slack)).toEqual([]);
+    after(1);
+    await look();
+    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
+    const told = blocksOf(slack.of("chat.postMessage")[0]);
+    expect(told).toContain("에이전트 계정이 30분 넘게 응답이 없습니다");
+    expect(told).toContain("Runner");
+    expect(told).toContain("머신이 켜져 있고 깨어 있는지");
+    // Once: the hours it stays silent say nothing more.
+    after(600);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    await stands("running", "unheard");
+    after(9);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    after(1);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    const back = blocksOf(slack.of("chat.postMessage")[1]);
+    expect(back).toContain("에이전트 계정이 다시 돌아갑니다");
+    expect(back).not.toContain("머신이");
+    expect(silences()).toEqual([]);
+    after(600);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+  });
+
+  it("says nothing of an account that blinks, before its manager was told or after", async () => {
+    const { slack, after, stands, look, silences } = await watched();
+    // Gone for twenty minutes and back: nobody is told, and the next silence counts anew.
+    await stands("unheard", "running");
+    after(20);
+    await stands("running", "unheard");
+    expect(silences()).toEqual([]);
+    after(5);
+    await stands("unheard", "running");
+    after(20);
+    await look();
+    expect(toWhom(slack)).toEqual([]);
+    after(10);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    // Asleep, its machine wakes for a few minutes each hour: the manager hears nothing of it.
+    for (let hour = 0; hour < 3; hour += 1) {
+      after(55);
+      await stands("running", "unheard");
+      await look();
+      after(5);
+      await stands("unheard", "running");
+      await look();
+    }
+    expect(toWhom(slack)).toHaveLength(1);
+    expect(silences()).toHaveLength(1);
+  });
+
+  it("leaves an account that stopped or failed meanwhile to that message, and a repeated delivery changes nothing", async () => {
+    const { slack, ctx, after, stands, look, silences } = await watched();
+    await stands("unheard", "running");
+    const kept = silences()[0]?.data;
+    after(3);
+    await onOwnWork(ctx.as(CONSOLE), {
+      ...event("agent.state_changed", { login: "bot-runner", state: "unheard", was: "running" }),
+      attempt: 2,
+    });
+    expect(silences().map((record) => record.data)).toEqual([kept]);
+    after(40);
+    await look();
+    await stands("failed", "unheard");
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(silences()).toEqual([]);
+    after(60);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    // An account nobody knows, and a state that is no text, keep nothing.
+    await onOwnWork(
+      ctx.as(CONSOLE),
+      event("agent.state_changed", { login: "x".repeat(5000), state: "unheard", was: null }),
+    );
+    await onOwnWork(
+      ctx.as(CONSOLE),
+      event("agent.state_changed", { login: "bot-runner", state: { $ne: "" }, was: [] }),
+    );
+    expect(silences()).toEqual([]);
+  });
+
+  it("tells as the manager chose: in the day's message, or nothing of a kind turned off", async () => {
+    const { slack, ctx, after, stands, look, silences } = await watched();
+    await notify.run(ctx, { cadence: "daily", at: "23:00" });
+    await stands("unheard", "running");
+    after(30);
+    await look();
+    expect(toWhom(slack)).toEqual([]);
+    expect(ctx.all("waiting").map((record) => record.data)).toMatchObject([
+      { personId: MINSU.id, kind: "agents", what: { title: "Runner", to: "unheard" } },
+    ]);
+    expect(String(ctx.all("waiting")[0]?.data.text)).toContain("머신이 켜져 있고");
+    await notify.run(ctx, { cadence: "now", off: ["agents"] });
+    await stands("running", "unheard");
+    after(10);
+    await look();
+    expect(silences()).toEqual([]);
+    expect(ctx.all("waiting")).toHaveLength(1);
+    await stands("unheard", "running");
+    after(30);
+    await look();
+    // Counted as told, so that turning the kind on again brings nothing old.
+    expect(silences()[0]?.data.toldAt).not.toBeNull();
+    expect(slack.of("chat.postMessage")).toHaveLength(0);
+  });
+
+  it("tries again at the next run what Slack did not take, and follows an account while Slack is not connected", async () => {
+    let fail = true;
+    const slack = fakeSlack({
+      "conversations.open": (params) =>
+        fail
+          ? { ok: false, error: "fatal_error" }
+          : { ok: true, channel: { id: `D0${params.users}` } },
+    });
+    const { ctx, after, stands, look, silences } = await watched({ slack });
+    await stands("unheard", "running");
+    after(30);
+    await look();
+    expect(slack.of("chat.postMessage")).toHaveLength(0);
+    expect(silences()[0]?.data.toldAt).toBeNull();
+    fail = false;
+    after(5);
+    await look();
+    expect(slack.of("chat.postMessage")).toHaveLength(1);
+    // The workspace taken away: nothing is sent, and the account coming back is still followed.
+    for (const connection of ctx.all("connections")) {
+      await ctx.as(CONSOLE).records("connections").update(connection.id, { state: "removed" });
+    }
+    await stands("running", "unheard");
+    expect(silences()[0]?.data.backAt).not.toBeNull();
+    after(10);
+    await look();
+    expect(slack.of("chat.postMessage")).toHaveLength(1);
+    expect(silences()).toHaveLength(1);
+  });
+
+  it("puts away the silence of an account that reports to nobody", async () => {
+    const slack = fakeSlack();
+    let at = NOW;
+    const made = setup({
+      slack,
+      now: () => at,
+      people: [MINSU, { ...HANA, id: RUNNER, login: "bot-runner", name: "Runner" }],
+    });
+    await connected(made.ctx);
+    await linked(made.ctx, MINSU, "U0MINSU01");
+    const hook = made.ctx.as(CONSOLE);
+    await onOwnWork(
+      hook,
+      event("agent.state_changed", { login: "bot-runner", state: "unheard", was: "running" }),
+    );
+    at = new Date(at.getTime() + 30 * MINUTE);
+    await unheard.run(hook);
+    expect(toWhom(slack)).toEqual([]);
+    expect(made.ctx.all("silences").every((record) => record.archivedAt !== null)).toBe(true);
   });
 });
 

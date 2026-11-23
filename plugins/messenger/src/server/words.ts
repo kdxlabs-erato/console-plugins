@@ -207,6 +207,8 @@ export interface ServerWords {
     readonly fields: Readonly<Record<string, string>>;
     readonly states: Readonly<Record<string, string>>;
     readonly agentStates: Readonly<Record<string, string>>;
+    /** What to look at where an agent account stands so, said under its name. */
+    readonly agentHints: Readonly<Record<string, string>>;
     readonly open: string;
     readonly choose: string;
     readonly turnOff: (kind: string) => string;
@@ -480,6 +482,10 @@ const EN: ServerWords = {
       refused: "was refused",
       failed: "failed",
       running: "runs again",
+      unheard: "has not been heard from for over 30 minutes",
+    },
+    agentHints: {
+      unheard: "Check that its machine is on and awake, and that its account is logged in there.",
     },
     open: "Open on the console",
     choose: "Choose what you are told",
@@ -753,6 +759,10 @@ const KO: ServerWords = {
       refused: "거절되었습니다",
       failed: "실패했습니다",
       running: "다시 돌아갑니다",
+      unheard: "30분 넘게 응답이 없습니다",
+    },
+    agentHints: {
+      unheard: "머신이 켜져 있고 깨어 있는지, 거기에 계정이 로그인되어 있는지 확인하세요.",
     },
     open: "콘솔에서 열기",
     choose: "받을 알림 정하기",

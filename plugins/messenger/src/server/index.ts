@@ -27,6 +27,7 @@ export {
   links,
   preferences,
   routes,
+  silences,
   threads,
   waiting,
 } from "./collections.js";
@@ -58,6 +59,7 @@ export {
   onOwnWork,
   projectNotices,
   turnOff,
+  unheard,
 } from "./notices.js";
 export { slackOauthEndpoint } from "./oauth.js";
 export { channels, route, routesQuery, unroute } from "./routes.js";

@@ -264,6 +264,28 @@ export const waiting = defineCollection("waiting", {
   retention: { days: 3 },
 });
 
+/**
+ * An agent account the console does not hear from, kept from the event that says so: the console
+ * tells a state as it changes and answers no plugin how an account stands, so that how long one
+ * has gone unheard is counted from here. Its manager is told once it lasted, and once more when
+ * the account is heard from again and stays so; one that came back before anyone was told is
+ * put away unsaid.
+ */
+export const silences = defineCollection("silences", {
+  schema: z.object({
+    /** The agent account. */
+    personId: id,
+    since: instant,
+    /** When its manager was told of it; none while it is too short to tell. */
+    toldAt: instant.nullable(),
+    /** When the account was heard from again after its manager was told; none while it is silent. */
+    backAt: instant.nullable(),
+  }),
+  indexes: ["personId"],
+  read: [ROLE],
+  history: false,
+});
+
 export const collections = [
   apps,
   connections,
@@ -273,6 +295,7 @@ export const collections = [
   deliveries,
   preferences,
   waiting,
+  silences,
 ];
 
 export type AppData = z.infer<typeof apps.schema>;
@@ -286,4 +309,5 @@ export type DeliveryData = z.infer<typeof deliveries.schema>;
 export type InstallData = z.infer<typeof install>;
 export type PreferenceData = z.infer<typeof preferences.schema>;
 export type WaitingData = z.infer<typeof waiting.schema>;
+export type SilenceData = z.infer<typeof silences.schema>;
 export type HappenedData = z.infer<typeof happened>;
