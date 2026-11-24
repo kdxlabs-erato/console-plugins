@@ -284,6 +284,9 @@ export const silences = defineCollection("silences", {
   indexes: ["personId"],
   read: [ROLE],
   history: false,
+  // Put away is only hidden: a silence a minute long is one more record each time, so what has
+  // not changed for a month goes, a silence still open that long with it.
+  retention: { days: 30, by: "updatedAt" },
 });
 
 export const collections = [
