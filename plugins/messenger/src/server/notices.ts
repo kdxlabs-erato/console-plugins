@@ -1,15 +1,16 @@
 // What a person is told of their own work, as they choose (ADR-0015): the console's events of the
 // projects the messenger is placed on, a task given to them, one they own moved, one of theirs
 // changed, commented or put away, a decision waiting on them, and to a manager their agent
-// accounts stopping, long unheard or running again; each told to the person it is about, never whoever made the
-// change, in their language. A message says what happened first, in a few words, then the thing,
-// its name the link to it on the console, then who did it; a day's message says each thing once,
-// with everything that happened to it, what waits on the person first. In a direct message, in the
-// workspace the project is told in where they have an account there, else the default, else
-// another they have one in (ADR-0014); at once, or in one message a day at a time of the
-// workspace's zone. Chosen on a page of the messenger's and through their agent, with the command
-// `notify` and the query `notices`; each message at once has a button that turns its kind off.
-// Whoever never chose is told of their agent accounts alone (ADR-0017).
+// accounts stopping, stopped by a usage limit until it resets, long unheard or running again; each
+// told to the person it is about, never whoever made the change, in their language. A message
+// says what happened first, in a few words, then the thing, its name the link to it on the
+// console, then who did it; a day's message says each thing once, with everything that happened
+// to it, what waits on the person first. In a direct message, in the workspace the project is
+// told in where they have an account there, else the default, else another they have one in
+// (ADR-0014); at once, or in one message a day at a time of the workspace's zone. Chosen on a
+// page of the messenger's and through their agent, with the command `notify` and the query
+// `notices`; each message at once has a button that turns its kind off. Whoever never chose is
+// told of their agent accounts alone (ADR-0017).
 import {
   arg,
   defineCommand,
@@ -34,6 +35,8 @@ import {
 import { MEMBER, ROLE } from "./access.js";
 import {
   type HappenedData,
+  type LimitData,
+  limits,
   type PreferenceData,
   preferences,
   type SilenceData,
@@ -89,6 +92,18 @@ const RUNNING = "running";
  */
 const UNHEARD_AFTER_MS = 30 * 60_000;
 const BACK_AFTER_MS = 10 * 60_000;
+/**
+ * An agent account its product's usage limit stopped: the console says it failed, with this word
+ * for why and, where the product named one, the moment the limit resets. A manager is told it in
+ * words of its own, as how the account stands.
+ */
+const FAILED = "failed";
+const USAGE_LIMIT = "usage_limit";
+/**
+ * How much later than its manager was told a limit must reset to be told again: the next window
+ * of an allowance, hours on, and not a moment the product names a little otherwise each time.
+ */
+const RESET_MOVED_MS = 30 * 60_000;
 
 type PreferenceRecord = PluginRecord<PreferenceData>;
 
@@ -521,10 +536,42 @@ function factsOf(words: NoticeWords, lines: readonly Line[]): string[] {
   return facts;
 }
 
-/** What to look at where an agent account stands as it does now, or nothing. */
-function hintOf(words: NoticeWords, lines: readonly Line[]): string | null {
-  const stands = lines.findLast((line) => line.kind === "agents")?.what.to ?? null;
-  return stands === null ? null : (words.agentHints[stands] ?? null);
+/** A moment on the clock of the workspace's zone, the zone named: `2026-11-24 03:00 (Asia/Seoul)`. */
+function clockOf(moment: string, timeZone: string): string {
+  const clock = clockIn(new Date(moment), timeZone);
+  return `${clock.day} ${clock.time} (${timeZone})`;
+}
+
+/**
+ * What is said under an agent account as it stands now, or nothing: what to look at; and for one
+ * its usage limit stopped, that it comes back by itself and when the limit resets. As Slack's
+ * markup the moment is Slack's own, written to each reader in their time zone, with the
+ * workspace's clock for where Slack does not write it; in plain words it is that clock.
+ */
+function hintOf(
+  words: NoticeWords,
+  lines: readonly Line[],
+  timeZone: string,
+  markup: boolean,
+): string | null {
+  const last = lines.findLast((line) => line.kind === "agents")?.what;
+  const stands = last?.to ?? null;
+  if (last === undefined || stands === null) {
+    return null;
+  }
+  const said = (text: string) => (markup ? safe(text) : text);
+  if (stands !== USAGE_LIMIT) {
+    const hint = words.agentHints[stands];
+    return hint === undefined ? null : said(hint);
+  }
+  const at = last.until === undefined ? Number.NaN : Date.parse(last.until);
+  if (last.until === undefined || Number.isNaN(at)) {
+    return said(words.limit.unknown);
+  }
+  const clock = said(clockOf(last.until, timeZone));
+  return `${said(words.limit.resets)} ${
+    markup ? `<!date^${Math.floor(at / 1000)}^${words.limit.moment}|${clock}>` : clock
+  }`;
 }
 
 /** Who did what happened to a thing: one or two by name, more as the first and a count. */
@@ -554,13 +601,14 @@ function entryMarkup(
   language: Language,
   entry: Entry,
   quotes: { readonly count: number; readonly each: number },
+  timeZone: string,
 ): string {
   const words = serverWords(language).notice;
   const who = whoOf(words, entry.lines);
   const facts = safe(factsOf(words, entry.lines).join(" · "));
   const last = entry.lines.at(-1)?.what;
   const label = last === undefined ? "" : labelOf(last);
-  const hint = hintOf(words, entry.lines);
+  const hint = hintOf(words, entry.lines, timeZone, true);
   const said = entry.lines
     .map((line) => line.what.excerpt)
     .filter((excerpt) => excerpt.length > 0)
@@ -569,17 +617,17 @@ function entryMarkup(
   return [
     who.length === 0 ? `*${facts}*` : `*${facts}* · ${safe(who)}`,
     entry.url === null ? safe(label) : link(entry.url, label),
-    ...(hint === null ? [] : [safe(hint)]),
+    ...(hint === null ? [] : [hint]),
     ...said,
   ].join("\n");
 }
 
 /** The same in one sentence, for where blocks are not read: a notification, and a line kept. */
-function sentenceOf(language: Language, line: Line): string {
+function sentenceOf(language: Language, line: Line, timeZone: string): string {
   const words = serverWords(language).notice;
   const who = whoOf(words, [line]);
   const facts = factsOf(words, [line]).join(" · ");
-  const hint = hintOf(words, [line]);
+  const hint = hintOf(words, [line], timeZone, false);
   const said = line.what.excerpt.length === 0 ? "" : ` — ${line.what.excerpt}`;
   return `${facts}${who.length === 0 ? "" : ` · ${who}`}: ${labelOf(line.what)}${
     hint === null ? "" : ` — ${hint}`
@@ -706,7 +754,8 @@ const CHANGED = ["title", "body", "startsOn", "dueOn"];
 
 /**
  * An agent account's states its manager is told of as they come: stopping, refused, failing, and
- * running again. One unheard is told by the job `unheard`, once it lasted.
+ * running again. A usage limit is told as it comes too, once for as long as it stands. One
+ * unheard is told by the job `unheard`, once it lasted, as is one running again after its limit.
  */
 const AGENT_TOLD = new Set(["stopped", "refused", "failed"]);
 
@@ -725,15 +774,136 @@ async function silenceOf(
   return page.items[0] ?? null;
 }
 
+async function limitOf(
+  ctx: PluginContext,
+  personId: string,
+): Promise<PluginRecord<LimitData> | null> {
+  const page = await ctx.records(limits).list({ where: { personId }, limit: 1 });
+  return page.items[0] ?? null;
+}
+
+/** When the console said what an event says: the event's own time, or now where it has none. */
+function saidAt(ctx: PluginContext, event: PluginHookEvent): string {
+  return (Number.isNaN(Date.parse(event.at)) ? ctx.now() : new Date(event.at)).toISOString();
+}
+
+/** The moment a limit resets as an event names it: an instant still to come, or none. */
+function resetOf(value: unknown, at: string): string | null {
+  const moment = typeof value === "string" && value.length <= 40 ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(moment) || moment <= Date.parse(at) ? null : new Date(moment).toISOString();
+}
+
+/** What an event of an agent account is to its usage limit. */
+interface LimitStep {
+  /** The limit is to be told: it begins, or resets later than its manager was told. */
+  readonly tell: boolean;
+  /** Nothing is told of the event: the limit stands as told, or ended, which the job tells once that lasted. */
+  readonly quiet: boolean;
+  /** The limit stood before the event and stands after it: the account is heard from, as it was. */
+  readonly again: boolean;
+  /** The moment the limit resets, where the event names one. */
+  readonly until: string | null;
+  /** Keeps what the manager was told, once they were. */
+  readonly told: () => Promise<void>;
+}
+
+const NO_LIMIT: LimitStep = {
+  tell: false,
+  quiet: false,
+  again: false,
+  until: null,
+  told: async () => {},
+};
+
+/**
+ * Follows an agent account into its usage limit and out of it. A limit is told as it comes, and
+ * its record kept once its manager was told, so that a delivery tried again tells whoever the
+ * first try did not. The same limit said again, after the account's machine slept or after a few
+ * minutes at work, tells nothing, unless it resets half an hour or more later than was told, or
+ * at a moment where none was told: the manager waits for the moment they were given. The account
+ * running again is kept from when the console said so, for the job to tell once it stayed so;
+ * one unheard meanwhile is not known to run, and counts anew; and one that stopped, was refused
+ * or failed otherwise is put away, its manager being told of that as it comes. Each step reads
+ * the record first, so that a delivery repeated changes nothing.
+ */
+async function followLimit(ctx: PluginContext, event: PluginHookEvent): Promise<LimitStep> {
+  const data = (event.data ?? {}) as Record<string, unknown>;
+  const state = typeof data.state === "string" ? data.state : null;
+  const login = typeof data.login === "string" ? data.login : null;
+  if (state === null || login === null) {
+    return NO_LIMIT;
+  }
+  const account = await agentOf(ctx, login);
+  if (account === undefined) {
+    return NO_LIMIT;
+  }
+  const found = await limitOf(ctx, account.id);
+  const at = saidAt(ctx, event);
+  if (state !== FAILED || data.detail !== USAGE_LIMIT) {
+    if (found === null) {
+      return NO_LIMIT;
+    }
+    if (state === RUNNING) {
+      if (found.data.backAt === null) {
+        await ctx.records(limits).update(found.id, { backAt: at });
+      }
+      return { ...NO_LIMIT, quiet: true };
+    }
+    if (state === UNHEARD) {
+      if (found.data.backAt !== null) {
+        await ctx.records(limits).update(found.id, { backAt: null });
+      }
+      return NO_LIMIT;
+    }
+    await ctx.records(limits).archive(found.id);
+    return NO_LIMIT;
+  }
+  const until = resetOf(data.until, at);
+  if (found === null) {
+    return {
+      ...NO_LIMIT,
+      tell: true,
+      until,
+      told: async () => {
+        await ctx.records(limits).create({ personId: account.id, since: at, until, backAt: null });
+      },
+    };
+  }
+  if (found.data.backAt !== null) {
+    await ctx.records(limits).update(found.id, { backAt: null });
+  }
+  const moved =
+    until !== null &&
+    (found.data.until === null ||
+      Date.parse(until) - Date.parse(found.data.until) >= RESET_MOVED_MS);
+  if (!moved) {
+    return { ...NO_LIMIT, quiet: true, again: true };
+  }
+  return {
+    ...NO_LIMIT,
+    tell: true,
+    again: true,
+    until,
+    told: async () => {
+      await ctx.records(limits).update(found.id, { until });
+    },
+  };
+}
+
 /**
  * Follows an agent account into its silence and out of it, whether or not Slack is connected: one
  * unheard is kept from when the console said so; one running again is put away where nobody was
- * told, and kept as back where its manager was, until it stayed so; one unheard again before
- * that is silent as it was; and one that stopped, was refused or failed is put away, its manager
- * being told of that as it comes. Each step reads the record first, so that a delivery repeated
- * changes nothing.
+ * told, and kept as back where its manager was, until it stayed so, as is one heard from again
+ * within the usage limit its manager knows of, which is nothing new to tell; one unheard again
+ * before that is silent as it was; and one that stopped, was refused or failed is put away, its
+ * manager being told of that as it comes. Each step reads the record first, so that a delivery
+ * repeated changes nothing.
  */
-async function followSilence(ctx: PluginContext, event: PluginHookEvent): Promise<void> {
+async function followSilence(
+  ctx: PluginContext,
+  event: PluginHookEvent,
+  limit: LimitStep,
+): Promise<void> {
   const data = (event.data ?? {}) as Record<string, unknown>;
   const state = typeof data.state === "string" ? data.state : null;
   const login = typeof data.login === "string" ? data.login : null;
@@ -745,7 +915,7 @@ async function followSilence(ctx: PluginContext, event: PluginHookEvent): Promis
     return;
   }
   const found = await silenceOf(ctx, account.id);
-  const at = (Number.isNaN(Date.parse(event.at)) ? ctx.now() : new Date(event.at)).toISOString();
+  const at = saidAt(ctx, event);
   if (state === UNHEARD) {
     if (found === null) {
       await ctx.records(silences).create({
@@ -762,7 +932,7 @@ async function followSilence(ctx: PluginContext, event: PluginHookEvent): Promis
   if (found === null) {
     return;
   }
-  if (state === RUNNING && found.data.toldAt !== null) {
+  if ((state === RUNNING || limit.again) && found.data.toldAt !== null) {
     if (found.data.backAt === null) {
       await ctx.records(silences).update(found.id, { backAt: at });
     }
@@ -771,15 +941,25 @@ async function followSilence(ctx: PluginContext, event: PluginHookEvent): Promis
   await ctx.records(silences).archive(found.id);
 }
 
-/** What an agent account standing otherwise comes to: a line to whoever it reports to. */
-async function noticesOfAgent(ctx: PluginContext, event: PluginHookEvent): Promise<Notice[]> {
+/**
+ * What an agent account standing otherwise comes to: a line to whoever it reports to. A usage
+ * limit is said as how the account stands, with the moment it resets, and nothing is said of a
+ * limit that stands as told, nor of the account running again after one, which the job tells.
+ */
+async function noticesOfAgent(
+  ctx: PluginContext,
+  event: PluginHookEvent,
+  limit: LimitStep,
+): Promise<Notice[]> {
   const data = (event.data ?? {}) as Record<string, unknown>;
   const state = typeof data.state === "string" ? data.state : null;
   const was = typeof data.was === "string" ? data.was : null;
   const login = typeof data.login === "string" ? data.login : null;
   const told =
-    (state !== null && AGENT_TOLD.has(state)) ||
-    (state === RUNNING && was !== null && AGENT_TOLD.has(was));
+    limit.tell ||
+    (!limit.quiet &&
+      ((state !== null && AGENT_TOLD.has(state)) ||
+        (state === RUNNING && was !== null && AGENT_TOLD.has(was))));
   if (!told || login === null || state === null) {
     return [];
   }
@@ -800,15 +980,22 @@ async function noticesOfAgent(ctx: PluginContext, event: PluginHookEvent): Promi
         ...NOTHING,
         title: clean(handle ?? account.name ?? account.login, 200),
         from: was === null ? null : clean(was, 40),
-        to: clean(state, 40),
-        excerpt: detail,
+        // The console's word for why is no sentence: the words of a limit say it.
+        to: limit.tell ? USAGE_LIMIT : clean(state, 40),
+        excerpt: limit.tell ? "" : detail,
+        ...(limit.tell && limit.until !== null ? { until: limit.until } : {}),
       },
     },
   ];
 }
 
 /** The message of one notice: what happened to the thing, the page that chooses, and the button that turns its kind off. */
-function noticeBlocks(language: Language, notice: Notice, origin: string | null): Block[] {
+function noticeBlocks(
+  language: Language,
+  notice: Notice,
+  origin: string | null,
+  timeZone: string,
+): Block[] {
   const words = serverWords(language).notice;
   const kind = notice.kind;
   const blocks: Block[] = [
@@ -817,6 +1004,7 @@ function noticeBlocks(language: Language, notice: Notice, origin: string | null)
         language,
         { url: notice.url, lines: [notice] },
         { count: 1, each: EXCERPT_AT_MOST },
+        timeZone,
       ),
     ),
   ];
@@ -875,6 +1063,7 @@ async function tellChosen(
   choice: PreferenceData,
   connected: readonly ConnectionRecord[],
   origin: string | null,
+  timeZone: string,
   fallbackLanguage: Language,
 ): Promise<boolean> {
   if (!(choice.kinds[notice.kind] ?? NOTICE_DEFAULTS[notice.kind])) {
@@ -888,7 +1077,7 @@ async function tellChosen(
     return false;
   }
   const language = await languageOfPerson(ctx, notice.personId, fallbackLanguage);
-  const sentence = sentenceOf(language, notice);
+  const sentence = sentenceOf(language, notice, timeZone);
   if (choice.cadence === "daily") {
     await ctx.records(waiting).create(
       {
@@ -902,7 +1091,12 @@ async function tellChosen(
       { owner: notice.personId },
     );
   } else {
-    await directly(ctx, account, fallback(sentence), noticeBlocks(language, notice, origin));
+    await directly(
+      ctx,
+      account,
+      fallback(sentence),
+      noticeBlocks(language, notice, origin, timeZone),
+    );
   }
   return true;
 }
@@ -920,6 +1114,7 @@ async function tellAll(
   found: readonly Notice[],
   connected: readonly ConnectionRecord[],
   origin: string | null,
+  timeZone: string,
   fallbackLanguage: Language,
   told: string[],
 ): Promise<void> {
@@ -938,7 +1133,7 @@ async function tellAll(
     if (notice.personId === actorId && !(byAgent && choice.ownAgents)) {
       continue;
     }
-    if (await tellChosen(ctx, notice, choice, connected, origin, fallbackLanguage)) {
+    if (await tellChosen(ctx, notice, choice, connected, origin, timeZone, fallbackLanguage)) {
       told.push(once);
     }
   }
@@ -971,8 +1166,10 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
       : typeof data.decisionId === "string"
         ? data.decisionId.slice(0, 64)
         : null;
+  let limit = NO_LIMIT;
   if (event.kind === "console:agent.state_changed") {
-    await followSilence(ctx, event);
+    limit = await followLimit(ctx, event);
+    await followSilence(ctx, event, limit);
   }
   const connected = await connectionsOf(ctx);
   if (connected.length === 0) {
@@ -983,7 +1180,7 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
     const workspace = await ctx.console.workspace();
     const found =
       event.kind === "console:agent.state_changed"
-        ? await noticesOfAgent(ctx, event)
+        ? await noticesOfAgent(ctx, event, limit)
         : await noticesOfBoard(ctx, event, workspace.url);
     if (found.length === 0) {
       await deliver(ctx, event, "skipped", "nobody", thing);
@@ -994,7 +1191,17 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
       : (((await ctx.records("apps").list({ limit: 1 })).items[0]?.data.language as
           | Language
           | undefined) ?? "en");
-    await tellAll(ctx, event, found, connected, workspace.url, fallbackLanguage, told);
+    await tellAll(
+      ctx,
+      event,
+      found,
+      connected,
+      workspace.url,
+      workspace.timeZone,
+      fallbackLanguage,
+      told,
+    );
+    await limit.told();
     await deliver(
       ctx,
       event,
@@ -1107,6 +1314,7 @@ export function dayBlocks(
   language: Language,
   kept: readonly PluginRecord<WaitingData>[],
   origin: string | null,
+  timeZone: string,
 ): { readonly blocks: Block[]; readonly title: string } {
   const words = serverWords(language).notice;
   const things = new Map<
@@ -1147,7 +1355,7 @@ export function dayBlocks(
       ...shown.map((thing) =>
         section(
           thing.said === null
-            ? entryMarkup(language, thing, DAY_QUOTES)
+            ? entryMarkup(language, thing, DAY_QUOTES, timeZone)
             : thing.url === null
               ? safe(thing.said)
               : `${safe(thing.said)} (${link(thing.url, words.open)})`,
@@ -1217,7 +1425,7 @@ async function sendDays(ctx: PluginContext): Promise<void> {
     const account = whereTold(connected, await accountsOf(ctx, personId), null);
     if (account !== null) {
       const language = await languageOfPerson(ctx, personId, fallbackLanguage);
-      const message = dayBlocks(language, kept, workspace.url);
+      const message = dayBlocks(language, kept, workspace.url, workspace.timeZone);
       try {
         await directly(ctx, account, fallback(message.title), message.blocks);
       } catch (error) {
@@ -1252,13 +1460,61 @@ export const day: JobDefinition = {
 };
 
 /**
- * Tells a manager of an agent account that has gone unheard for half an hour, once, with what to
- * look at, and of one heard from again for ten minutes after that, once; as they chose, in the
- * kind of their agent accounts, at once or in the day's message. An account that left, or reports
- * to nobody, is put away. A message Slack did not take is tried at the next run. Most runs read
- * what is kept, find nothing due and write nothing.
+ * Tells whoever an agent account reports to how it stands now, as they chose, in the kind of
+ * their agent accounts, at once or in the day's message. Answers `gone` for an account that left
+ * or reports to nobody, and `untaken` where Slack did not take the message.
  */
-async function tellSilences(ctx: PluginContext): Promise<void> {
+async function tellManager(
+  ctx: PluginContext,
+  personId: string,
+  stands: Pick<Happened, "from" | "to">,
+  connected: readonly ConnectionRecord[],
+  workspace: { readonly url: string | null; readonly timeZone: string },
+  fallbackLanguage: Language,
+): Promise<"told" | "gone" | "untaken"> {
+  const account = await ctx.console.people.get(personId);
+  const managerId = account?.managerId ?? null;
+  if (account === null || account.status !== "active" || managerId === null) {
+    return "gone";
+  }
+  try {
+    await tellChosen(
+      ctx,
+      {
+        personId: managerId,
+        kind: "agents",
+        projectId: null,
+        url: null,
+        what: {
+          ...NOTHING,
+          title: clean(account.handle ?? account.name ?? account.login, 200),
+          ...stands,
+        },
+      },
+      await choiceOf(ctx, managerId),
+      connected,
+      workspace.url,
+      workspace.timeZone,
+      fallbackLanguage,
+    );
+  } catch (error) {
+    ctx.log.warn("an agent account's manager was not told how it stands", {
+      code: error instanceof SlackError ? error.code : null,
+    });
+    return "untaken";
+  }
+  return "told";
+}
+
+/**
+ * Tells a manager what is told once it lasted: an agent account that has gone unheard for half an
+ * hour, once, with what to look at; and one that has run again for ten minutes, once, after such
+ * a silence or after its usage limit, and once for both where it was silent within its limit. As
+ * they chose, in the kind of their agent accounts, at once or in the day's message. An account
+ * that left, or reports to nobody, is put away. A message Slack did not take is tried at the next
+ * run. Most runs read what is kept, find nothing due and write nothing.
+ */
+async function tellLasting(ctx: PluginContext): Promise<void> {
   const now = ctx.now();
   const lasted = (since: string) => now.getTime() - Date.parse(since);
   const due = (
@@ -1270,7 +1526,13 @@ async function tellSilences(ctx: PluginContext): Promise<void> {
       ? lasted(data.backAt) >= BACK_AFTER_MS
       : data.toldAt === null && lasted(data.since) >= UNHEARD_AFTER_MS,
   );
-  if (due.length === 0) {
+  const limited = await everyOne<LimitData>((after) =>
+    ctx.records(limits).list({ limit: 200, ...(after === undefined ? {} : { after }) }),
+  );
+  const back = limited.filter(
+    ({ data }) => data.backAt !== null && lasted(data.backAt) >= BACK_AFTER_MS,
+  );
+  if (due.length === 0 && back.length === 0) {
     return;
   }
   const connected = await connectionsOf(ctx);
@@ -1279,54 +1541,52 @@ async function tellSilences(ctx: PluginContext): Promise<void> {
   }
   const workspace = await ctx.console.workspace();
   const fallbackLanguage = workspace.languageSet ? languageOf(workspace.language) : "en";
+  const within = new Set(limited.map((record) => record.data.personId));
   for (const record of due) {
-    const back = record.data.backAt !== null;
-    const account = await ctx.console.people.get(record.data.personId);
-    const managerId = account?.managerId ?? null;
-    if (account === null || account.status !== "active" || managerId === null) {
+    const returned = record.data.backAt !== null;
+    // Heard from again within a usage limit: the limit's own return says that it runs again.
+    if (returned && within.has(record.data.personId)) {
       await ctx.records(silences).archive(record.id);
       continue;
     }
-    try {
-      await tellChosen(
-        ctx,
-        {
-          personId: managerId,
-          kind: "agents",
-          projectId: null,
-          url: null,
-          what: {
-            ...NOTHING,
-            title: clean(account.handle ?? account.name ?? account.login, 200),
-            from: back ? UNHEARD : null,
-            to: back ? RUNNING : UNHEARD,
-          },
-        },
-        await choiceOf(ctx, managerId),
-        connected,
-        workspace.url,
-        fallbackLanguage,
-      );
-    } catch (error) {
-      ctx.log.warn("an agent account's silence was not told", {
-        code: error instanceof SlackError ? error.code : null,
-      });
+    const outcome = await tellManager(
+      ctx,
+      record.data.personId,
+      { from: returned ? UNHEARD : null, to: returned ? RUNNING : UNHEARD },
+      connected,
+      workspace,
+      fallbackLanguage,
+    );
+    if (outcome === "untaken") {
       continue;
     }
     // Marked whether or not the manager chose to be told: a silence is told once, or never.
-    if (back) {
+    if (outcome === "gone" || returned) {
       await ctx.records(silences).archive(record.id);
     } else {
       await ctx.records(silences).update(record.id, { toldAt: now.toISOString() });
+    }
+  }
+  for (const record of back) {
+    const outcome = await tellManager(
+      ctx,
+      record.data.personId,
+      { from: USAGE_LIMIT, to: RUNNING },
+      connected,
+      workspace,
+      fallbackLanguage,
+    );
+    if (outcome !== "untaken") {
+      await ctx.records(limits).archive(record.id);
     }
   }
 }
 
 export const unheard: JobDefinition = {
   about:
-    "Tells a manager of an agent account unheard for half an hour, and of one heard from again after.",
+    "Tells a manager of an agent account unheard for half an hour, and of one running again after that or after its usage limit.",
   every: "PT5M",
   async run(ctx) {
-    await tellSilences(ctx);
+    await tellLasting(ctx);
   },
 };

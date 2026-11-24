@@ -262,8 +262,8 @@ export interface ActivityRow {
 /**
  * What a person may be told of their own work in a direct message (ADR-0015): a task given to
  * them; a task they own moved; one of theirs changed, its days, title or body; commented; put
- * away; a decision waiting on them; for a manager, their agent accounts stopping, long unheard
- * or running again.
+ * away; a decision waiting on them; for a manager, their agent accounts stopping, stopped by a
+ * usage limit, long unheard or running again.
  */
 export const NOTICE_KINDS = [
   "assigned",
