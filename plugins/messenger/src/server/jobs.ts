@@ -4,7 +4,8 @@
 // matched the first time; every day the people matched again in every workspace, so that a new
 // member, a left one or a changed account is caught where no event said so; and every five
 // minutes the message of the day sent to each person who chose one, once their time has come,
-// and a manager told of an agent account that has gone unheard for long, or is heard from again.
+// and a manager told of an agent account that has gone unheard for long, or runs again after
+// that or after its usage limit.
 import type { JobDefinition, PluginContext } from "@skillcdn/console/plugin";
 import { keepConnection } from "./connection.js";
 import { matchEveryone } from "./matching.js";

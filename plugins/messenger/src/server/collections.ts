@@ -239,6 +239,11 @@ const happened = z.object({
   fields: z.array(z.string().max(40)).max(8),
   /** A comment's words, or what an agent account's state says of itself. */
   excerpt: z.string().max(200),
+  /**
+   * Until when an agent account stands so, where its runner said: the moment its usage limit
+   * resets. Left out of everything else, and of a line kept before the field was.
+   */
+  until: instant.optional(),
 });
 
 /** A line of a person's message of the day, kept until it is sent; forgotten after a few days. */
@@ -289,6 +294,31 @@ export const silences = defineCollection("silences", {
   retention: { days: 30, by: "updatedAt" },
 });
 
+/**
+ * An agent account its product's usage limit stopped, as its manager was told of it: kept once
+ * the limit was told, with the moment it was said to reset, so that the same limit said again,
+ * after the account's machine slept or after a few minutes at work, tells nobody a second time.
+ * Its manager is told once more when the account has run again and stayed so, and the record is
+ * put away then, or when the account stops for another reason, which is told as it comes.
+ * Forgotten a month after its last change: the ones put away do not add up, and one that nothing
+ * ended, its account gone or an event lost, does not keep a later limit from being told.
+ */
+export const limits = defineCollection("limits", {
+  schema: z.object({
+    /** The agent account. */
+    personId: id,
+    since: instant,
+    /** When the limit resets, as its manager was told; none where the product named no moment. */
+    until: instant.nullable(),
+    /** When the account ran again; none while the limit stops it, or while it is unheard. */
+    backAt: instant.nullable(),
+  }),
+  indexes: ["personId"],
+  read: [ROLE],
+  history: false,
+  retention: { days: 30, by: "updatedAt" },
+});
+
 export const collections = [
   apps,
   connections,
@@ -299,6 +329,7 @@ export const collections = [
   preferences,
   waiting,
   silences,
+  limits,
 ];
 
 export type AppData = z.infer<typeof apps.schema>;
@@ -313,4 +344,5 @@ export type InstallData = z.infer<typeof install>;
 export type PreferenceData = z.infer<typeof preferences.schema>;
 export type WaitingData = z.infer<typeof waiting.schema>;
 export type SilenceData = z.infer<typeof silences.schema>;
+export type LimitData = z.infer<typeof limits.schema>;
 export type HappenedData = z.infer<typeof happened>;

@@ -330,30 +330,34 @@ describe("decisions and agent accounts", () => {
   });
 });
 
+const MINUTE = 60_000;
+const RUNNER = "0199a000-0000-7000-8000-0000000000a9";
+
+/** A clock a test moves, the runner's state said at its time, and the job run at it. */
+async function watched(options: { readonly slack?: ReturnType<typeof fakeSlack> } = {}) {
+  let at = NOW;
+  const made = await ready({ now: () => at, ...options });
+  const kept = (collection: string) => () =>
+    made.ctx.all(collection).filter((record) => record.archivedAt === null);
+  return {
+    ...made,
+    after: (minutes: number) => {
+      at = new Date(at.getTime() + minutes * MINUTE);
+    },
+    /** A moment so many minutes on, as the console writes one. */
+    moment: (minutes: number) => new Date(at.getTime() + minutes * MINUTE).toISOString(),
+    stands: (state: string, was: string, more: Record<string, unknown> = {}) =>
+      onOwnWork(made.hook, {
+        ...event("agent.state_changed", { login: "bot-runner", state, was, ...more }),
+        at: at.toISOString(),
+      }),
+    look: () => unheard.run(made.hook),
+    silences: kept("silences"),
+    limits: kept("limits"),
+  };
+}
+
 describe("an agent account unheard", () => {
-  const MINUTE = 60_000;
-  const RUNNER = "0199a000-0000-7000-8000-0000000000a9";
-
-  /** A clock a test moves, the runner's state said at its time, and the job run at it. */
-  async function watched(options: { readonly slack?: ReturnType<typeof fakeSlack> } = {}) {
-    let at = NOW;
-    const made = await ready({ now: () => at, ...options });
-    return {
-      ...made,
-      after: (minutes: number) => {
-        at = new Date(at.getTime() + minutes * MINUTE);
-      },
-      stands: (state: string, was: string, attempt = 1) =>
-        onOwnWork(made.hook, {
-          ...event("agent.state_changed", { login: "bot-runner", state, was }),
-          at: at.toISOString(),
-          attempt,
-        }),
-      look: () => unheard.run(made.hook),
-      silences: () => made.ctx.all("silences").filter((record) => record.archivedAt === null),
-    };
-  }
-
   it("tells the manager once after half an hour, with what to look at, and once when it is back for ten minutes", async () => {
     const { slack, after, stands, look, silences } = await watched();
     await stands("unheard", "running");
@@ -520,6 +524,321 @@ describe("an agent account unheard", () => {
     await unheard.run(hook);
     expect(toWhom(slack)).toEqual([]);
     expect(made.ctx.all("silences").every((record) => record.archivedAt !== null)).toBe(true);
+  });
+});
+
+describe("an agent account stopped by its usage limit", () => {
+  /** What the console says of an account its product's usage limit stopped, with the moment it resets where one is named. */
+  const limit = (until?: unknown) => ({
+    detail: "usage_limit",
+    ...(until === undefined ? {} : { until }),
+  });
+  const RESETS = "한도가 풀리면 스스로 돌아옵니다:";
+  const UNKNOWN = "한도가 언제 풀리는지 제품이 알려 주지 않았습니다";
+  const BACK = "에이전트 계정이 다시 돌아갑니다";
+
+  it("tells the manager once, with when the limit resets, and once when the account has run again for ten minutes", async () => {
+    const { slack, after, moment, stands, look, limits } = await watched();
+    // 01:00 UTC is 10:00 in Seoul: the limit resets five hours on, at 15:00 there.
+    const until = moment(300);
+    await stands("failed", "running", { handle: "runner", ...limit(until) });
+    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
+    const told = slack.of("chat.postMessage")[0];
+    expect(blocksOf(told)).toContain("에이전트 계정이 사용량 한도에 닿아 멈췄습니다");
+    expect(blocksOf(told)).toContain("runner");
+    // The moment is Slack's to write, to each reader in their own zone; the workspace's clock where it does not.
+    expect(blocksOf(told)).toContain(
+      `${RESETS} <!date^${Date.parse(until) / 1000}^{date_short_pretty} {time}|2026-11-09 15:00 (Asia/Seoul)>`,
+    );
+    // The console's word for why is said in the person's words, never quoted.
+    expect(blocksOf(told)).not.toContain("usage_limit");
+    // A notification reads no markup: the clock, and the zone it is of.
+    expect(told?.params.text).toContain(`${RESETS} 2026-11-09 15:00 (Asia/Seoul)`);
+    expect(told?.params.text).not.toContain("date^");
+    expect(limits().map((record) => record.data)).toMatchObject([{ until, backAt: null }]);
+    // Once: the hours the limit stands say nothing more.
+    after(299);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    after(2);
+    await stands("running", "failed", { detail: "resumed" });
+    after(9);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    after(1);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    const back = blocksOf(slack.of("chat.postMessage")[1]);
+    expect(back).toContain(BACK);
+    expect(back).toContain("Runner");
+    expect(back).not.toContain("한도");
+    expect(limits()).toEqual([]);
+    after(600);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+  });
+
+  it("says nothing more of a limit met again within the ten minutes, but a reset that moved later", async () => {
+    const { slack, after, moment, stands, look, limits } = await watched();
+    await stands("failed", "running", limit(moment(60)));
+    // Back at the reset, a few minutes at work, and stopped again, a few times over.
+    after(61);
+    await stands("running", "failed");
+    after(3);
+    await stands("failed", "running", limit(moment(15)));
+    await look();
+    after(16);
+    await stands("running", "failed");
+    after(4);
+    // A product that names no moment this time: the manager keeps the one they have.
+    await stands("failed", "running", limit());
+    after(20);
+    await look();
+    expect(toWhom(slack)).toHaveLength(1);
+    expect(limits()).toHaveLength(1);
+    // The next window of the allowance, five hours on: the manager would wait for a moment long past.
+    await stands("running", "failed");
+    after(2);
+    const later = moment(300);
+    await stands("failed", "running", limit(later));
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(blocksOf(slack.of("chat.postMessage")[1])).toContain(
+      `<!date^${Date.parse(later) / 1000}^`,
+    );
+    expect(limits().map((record) => record.data)).toMatchObject([{ until: later, backAt: null }]);
+    after(301);
+    await stands("running", "failed");
+    after(10);
+    await look();
+    // One return for the whole of it.
+    expect(toWhom(slack)).toHaveLength(3);
+    expect(blocksOf(slack.of("chat.postMessage")[2])).toContain(BACK);
+    expect(limits()).toEqual([]);
+  });
+
+  it("says the limit once to the manager of an account whose machine sleeps through it, and its return once", async () => {
+    const { slack, after, moment, stands, look, limits, silences } = await watched();
+    const until = moment(300);
+    await stands("failed", "running", limit(until));
+    // The machine goes to sleep: the silence is told as any is, once it lasted.
+    after(20);
+    await stands("unheard", "failed");
+    after(30);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(blocksOf(slack.of("chat.postMessage")[1])).toContain("30분 넘게 응답이 없습니다");
+    // It wakes for a few minutes each hour and says its limit again: nobody hears of it twice.
+    for (let hour = 0; hour < 3; hour += 1) {
+      after(55);
+      await stands("failed", "unheard", limit(until));
+      await look();
+      after(5);
+      await stands("unheard", "failed");
+      await look();
+    }
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(silences()).toHaveLength(1);
+    expect(limits()).toHaveLength(1);
+    // Awake after the reset, the runner brings the agent back: one message says it runs again.
+    after(90);
+    await stands("running", "unheard");
+    after(5);
+    // Unheard for a moment within the ten minutes: not known to run, and counted anew.
+    await stands("unheard", "running");
+    after(5);
+    await look();
+    await stands("running", "unheard");
+    after(9);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    after(1);
+    await look();
+    expect(toWhom(slack)).toHaveLength(3);
+    expect(blocksOf(slack.of("chat.postMessage")[2])).toContain(BACK);
+    expect(silences()).toEqual([]);
+    expect(limits()).toEqual([]);
+    // Awake but still within its limit for ten minutes: the silence is over, and nothing runs yet.
+    await stands("failed", "running", limit(moment(300)));
+    await stands("unheard", "failed");
+    after(30);
+    await look();
+    await stands("failed", "unheard", limit(moment(270)));
+    after(10);
+    await look();
+    expect(toWhom(slack)).toHaveLength(5);
+    expect(silences()).toEqual([]);
+    expect(limits()).toHaveLength(1);
+  });
+
+  it("leaves an account that stopped or failed otherwise to that message, and a console that names no limit as it was", async () => {
+    const { slack, after, moment, stands, look, limits } = await watched();
+    await stands("failed", "running", limit(moment(300)));
+    // A supervisor stops it meanwhile: told as it comes, and so is its running again.
+    after(5);
+    await stands("stopped", "failed", { detail: "stop" });
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(limits()).toEqual([]);
+    await stands("running", "stopped");
+    expect(toWhom(slack)).toHaveLength(3);
+    // A console of before the word says the account crashed, and no moment: said as a failure is.
+    await stands("failed", "running", { detail: "crashed" });
+    expect(toWhom(slack)).toHaveLength(4);
+    const failed = blocksOf(slack.of("chat.postMessage")[3]);
+    expect(failed).toContain("에이전트 계정이 실패했습니다");
+    expect(failed).toContain("crashed");
+    expect(limits()).toEqual([]);
+    await stands("running", "failed");
+    expect(toWhom(slack)).toHaveLength(5);
+    after(60);
+    await look();
+    expect(toWhom(slack)).toHaveLength(5);
+  });
+
+  it("reads the moment as data: none where it is no instant or is past, and a delivery repeated changes nothing", async () => {
+    const past = new Date(NOW.getTime() - MINUTE).toISOString();
+    for (const until of ["3am", 1794204000, { $gt: "" }, "9".repeat(5000), past, null, undefined]) {
+      const { slack, stands, limits } = await watched();
+      await stands("failed", "running", limit(until));
+      const told = blocksOf(slack.of("chat.postMessage")[0]);
+      expect(told, String(until)).toContain(UNKNOWN);
+      expect(told, String(until)).not.toContain("date^");
+      expect(limits().map((record) => record.data.until)).toEqual([null]);
+    }
+    const { slack, ctx, hook, moment, stands, limits } = await watched();
+    // A name that is markup rings nobody, beside a moment that is Slack's own.
+    const once = {
+      ...event("agent.state_changed", {
+        login: "bot-runner",
+        handle: "<!channel>",
+        state: "failed",
+        was: "running",
+        ...limit(moment(300)),
+      }),
+    };
+    await onOwnWork(hook, once);
+    await onOwnWork(hook, { ...once, attempt: 2 });
+    expect(toWhom(slack)).toHaveLength(1);
+    expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("&lt;!channel&gt;");
+    expect(blocksOf(slack.of("chat.postMessage")[0])).not.toContain("<!channel>");
+    expect(limits()).toHaveLength(1);
+    // A reason that is no text is no limit, and an account nobody knows keeps nothing.
+    await stands("failed", "running", { detail: { $ne: "" }, until: moment(300) });
+    expect(limits()).toEqual([]);
+    await onOwnWork(
+      ctx.as(CONSOLE),
+      event("agent.state_changed", {
+        login: "x".repeat(5000),
+        state: "failed",
+        was: "running",
+        ...limit(moment(300)),
+      }),
+    );
+    expect(limits()).toEqual([]);
+  });
+
+  it("tells as the manager chose: in the day's message with the moment, or nothing of a kind turned off", async () => {
+    const { slack, ctx, hook, after, moment, stands, look, limits } = await watched();
+    await notify.run(ctx, { cadence: "daily", at: "11:00" });
+    const until = moment(300);
+    await stands("failed", "running", limit(until));
+    expect(toWhom(slack)).toEqual([]);
+    expect(ctx.all("waiting").map((record) => record.data)).toMatchObject([
+      { personId: MINSU.id, kind: "agents", what: { title: "Runner", to: "usage_limit", until } },
+    ]);
+    expect(String(ctx.all("waiting")[0]?.data.text)).toContain("2026-11-09 15:00 (Asia/Seoul)");
+    after(60);
+    await day.run(hook);
+    expect(blocksOf(slack.of("chat.postMessage")[0])).toContain(
+      `${RESETS} <!date^${Date.parse(until) / 1000}^`,
+    );
+    // The kind turned off: counted as told, so that turning it on again brings nothing old.
+    await notify.run(ctx, { cadence: "now", off: ["agents"] });
+    await stands("running", "failed");
+    after(10);
+    await look();
+    expect(limits()).toEqual([]);
+    await stands("failed", "running", limit(moment(300)));
+    expect(limits()).toHaveLength(1);
+    await notify.run(ctx, { on: ["agents"] });
+    await stands("unheard", "failed");
+    await stands("failed", "unheard", limit(moment(300)));
+    expect(slack.of("chat.postMessage")).toHaveLength(1);
+  });
+
+  it("tells at the next try what Slack did not take, and keeps nothing of a limit nobody could be told", async () => {
+    let fail = true;
+    const slack = fakeSlack({
+      "conversations.open": (params) =>
+        fail
+          ? { ok: false, error: "fatal_error" }
+          : { ok: true, channel: { id: `D0${params.users}` } },
+    });
+    const { ctx, hook, after, moment, stands, look, limits } = await watched({ slack });
+    const once = event("agent.state_changed", {
+      login: "bot-runner",
+      state: "failed",
+      was: "running",
+      ...limit(moment(300)),
+    });
+    await expect(onOwnWork(hook, once)).rejects.toBeDefined();
+    // Kept once its manager was told: the try after tells them.
+    expect(limits()).toEqual([]);
+    fail = false;
+    await onOwnWork(hook, { ...once, attempt: 2 });
+    expect(slack.of("chat.postMessage")).toHaveLength(1);
+    expect(limits()).toHaveLength(1);
+    await stands("running", "failed");
+    after(10);
+    fail = true;
+    await look();
+    expect(limits()).toHaveLength(1);
+    fail = false;
+    after(5);
+    await look();
+    expect(slack.of("chat.postMessage")).toHaveLength(2);
+    expect(limits()).toEqual([]);
+    // The workspace taken away: a limit is kept by nobody, and told when it is said again after.
+    for (const connection of ctx.all("connections")) {
+      await ctx.as(CONSOLE).records("connections").update(connection.id, { state: "removed" });
+    }
+    await stands("failed", "running", limit(moment(300)));
+    expect(limits()).toEqual([]);
+    expect(slack.of("chat.postMessage")).toHaveLength(2);
+  });
+
+  it("puts away the limit of an account that reports to nobody", async () => {
+    const slack = fakeSlack();
+    let at = NOW;
+    const made = setup({
+      slack,
+      now: () => at,
+      people: [MINSU, { ...HANA, id: RUNNER, login: "bot-runner", name: "Runner" }],
+    });
+    await connected(made.ctx);
+    await linked(made.ctx, MINSU, "U0MINSU01");
+    const hook = made.ctx.as(CONSOLE);
+    // Nobody to tell: nothing is kept of its limit.
+    await onOwnWork(
+      hook,
+      event("agent.state_changed", {
+        login: "bot-runner",
+        state: "failed",
+        was: "running",
+        ...limit(),
+      }),
+    );
+    expect(made.ctx.all("limits")).toEqual([]);
+    // One whose manager left it since: put away when its return comes due.
+    await hook.records("limits").create({
+      personId: RUNNER,
+      since: NOW.toISOString(),
+      until: null,
+      backAt: NOW.toISOString(),
+    });
+    at = new Date(at.getTime() + 10 * MINUTE);
+    await unheard.run(hook);
+    expect(toWhom(slack)).toEqual([]);
+    expect(made.ctx.all("limits").every((record) => record.archivedAt !== null)).toBe(true);
   });
 });
 

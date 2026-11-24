@@ -209,6 +209,16 @@ export interface ServerWords {
     readonly agentStates: Readonly<Record<string, string>>;
     /** What to look at where an agent account stands so, said under its name. */
     readonly agentHints: Readonly<Record<string, string>>;
+    /**
+     * What is said under an agent account its usage limit stopped: that it comes back by itself,
+     * which ends before the moment the limit resets; the same where its product named no moment;
+     * and how Slack writes that moment to each reader, in their own time zone.
+     */
+    readonly limit: {
+      readonly resets: string;
+      readonly unknown: string;
+      readonly moment: string;
+    };
     readonly open: string;
     readonly choose: string;
     readonly turnOff: (kind: string) => string;
@@ -483,9 +493,16 @@ const EN: ServerWords = {
       failed: "failed",
       running: "runs again",
       unheard: "has not been heard from for over 30 minutes",
+      usage_limit: "reached its usage limit",
     },
     agentHints: {
       unheard: "Check that its machine is on and awake, and that its account is logged in there.",
+    },
+    limit: {
+      resets: "It comes back by itself when the limit resets:",
+      unknown:
+        "Its product did not say when the limit resets. It comes back by itself once it does.",
+      moment: "{date_short_pretty} at {time}",
     },
     open: "Open on the console",
     choose: "Choose what you are told",
@@ -760,9 +777,15 @@ const KO: ServerWords = {
       failed: "실패했습니다",
       running: "다시 돌아갑니다",
       unheard: "30분 넘게 응답이 없습니다",
+      usage_limit: "사용량 한도에 닿아 멈췄습니다",
     },
     agentHints: {
       unheard: "머신이 켜져 있고 깨어 있는지, 거기에 계정이 로그인되어 있는지 확인하세요.",
+    },
+    limit: {
+      resets: "한도가 풀리면 스스로 돌아옵니다:",
+      unknown: "한도가 언제 풀리는지 제품이 알려 주지 않았습니다. 풀리면 스스로 돌아옵니다.",
+      moment: "{date_short_pretty} {time}",
     },
     open: "콘솔에서 열기",
     choose: "받을 알림 정하기",

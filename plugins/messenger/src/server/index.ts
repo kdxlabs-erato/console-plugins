@@ -24,6 +24,7 @@ export {
   collections,
   connections,
   deliveries,
+  limits,
   links,
   preferences,
   routes,
