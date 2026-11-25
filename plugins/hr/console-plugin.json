@@ -13,7 +13,7 @@
     "ko": "구성원의 휴가와 누가 쉬는지, 인사 공지를 다룹니다. 인사 담당은 휴가 규정을 관리하고 공지를 씁니다."
   },
   "pluginApi": 1,
-  "console": ">=0.6.0 <0.7.0",
+  "console": ">=0.6.1 <0.7.0",
   "server": "dist/server/index.js",
   "web": "dist/web",
   "skills": "skills",
@@ -72,7 +72,9 @@
       "description": {
         "en": "Leave approvals and the people's matters. A decision reaches whoever it is for and the managers above them, wherever they are.",
         "ko": "휴가 결재와 인사 업무. 결정은 받을 사람과 그 위 매니저에게 어디서든 갑니다."
-      }
+      },
+      "glyph": "people",
+      "color": "green"
     }
   },
   "menu": {
