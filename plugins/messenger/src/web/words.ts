@@ -473,7 +473,7 @@ const EN: Words = {
   },
   activity: {
     title: "Activity",
-    lead: "What the messenger did with each event it heard, kept for a month.",
+    lead: "How each notification the messenger had someone to send to went, kept for a month. Whose it was and what it was about are not shown.",
     all: "All",
     outcomes: { sent: "Sent", skipped: "Passed over", failed: "Failed" },
     when: "When",
@@ -498,9 +498,12 @@ const EN: Words = {
       "console:task.archived": "Task put away",
       "console:decision.raised": "Decision raised",
       "console:decision.addressed": "Decision addressed",
+      "console:decision.answered": "Decision answered",
       "console:agent.state_changed": "Agent account state",
     },
     notes: {
+      told: (count) => (count === "1" ? "Sent on to 1 person." : `Sent on to ${count} people.`),
+      unreached: () => "Nobody the console told of it takes it in Slack.",
       thread: () => "The conversation is begun and the step asked.",
       nobody: () => "Nobody of this request is in Slack.",
       next_step: () => "The step is closed and the next asked.",
@@ -787,7 +790,7 @@ const KO: Words = {
   },
   activity: {
     title: "전송 기록",
-    lead: "메신저가 받은 알림마다 한 일을 한 달 동안 보관합니다.",
+    lead: "메신저가 전달할 사람이 있던 알림의 결과를 한 달 동안 보관합니다. 누구에게 온 무슨 내용인지는 보이지 않습니다.",
     all: "모두",
     outcomes: { sent: "보냄", skipped: "건너뜀", failed: "실패" },
     when: "시각",
@@ -812,9 +815,12 @@ const KO: Words = {
       "console:task.archived": "작업 보관",
       "console:decision.raised": "결정 요청",
       "console:decision.addressed": "결정 담당 지정",
+      "console:decision.answered": "결정 답변",
       "console:agent.state_changed": "에이전트 계정 상태",
     },
     notes: {
+      told: (count) => `${count}명에게 전달했습니다.`,
+      unreached: () => "콘솔이 알린 사람 가운데 Slack으로 받는 사람이 없습니다.",
       thread: () => "대화를 열고 결재를 요청했습니다.",
       nobody: () => "이 신청에 관련된 사람이 Slack에 없습니다.",
       next_step: () => "결재 단계를 닫고 다음 단계를 요청했습니다.",

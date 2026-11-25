@@ -234,11 +234,13 @@ export type Outcome = "sent" | "skipped" | "failed";
 
 /**
  * What a delivery line says, as a code the page says in its reader's language, any detail after
- * a colon: told (`thread`, `next_step`, `approved:<posts>`, ...), passed over (`not_connected`,
- * `no_grant`, `outside:<version>`, ...), or failed (`slack:<code>`, `console:<code>`,
- * `rate_limited`).
+ * a colon: sent on (`told:<how many>`), told (`thread`, `next_step`, `approved:<posts>`, ...),
+ * passed over (`unreached`, `not_connected`, `no_grant`, `outside:<version>`, ...), or failed
+ * (`slack:<code>`, `console:<code>`, `rate_limited`).
  */
 export const NOTES = [
+  "told",
+  "unreached",
   "thread",
   "nobody",
   "next_step",
@@ -263,11 +265,11 @@ export const NOTES = [
 ] as const;
 export type NoteCode = (typeof NOTES)[number];
 
+/** A line of the log: never which project, what it was about or whom it was for (ADR-0019). */
 export interface ActivityRow {
   readonly id: string;
   readonly at: string;
   readonly kind: string;
-  readonly thing: string | null;
   readonly outcome: Outcome;
   readonly note: string;
   readonly attempt: number;

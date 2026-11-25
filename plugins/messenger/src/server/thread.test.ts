@@ -499,6 +499,23 @@ describe("what stands in the way", () => {
     expect(off.slack.calls).toHaveLength(0);
   });
 
+  it("passes over a request nobody of is in Slack, and the end of one nothing was told of", async () => {
+    const { ctx, slack } = setup({ hr: fakeHr({ views: { [REQUEST]: view({}) } }) });
+    await connected(ctx);
+    const hook = ctx.as(CONSOLE);
+    await onLeaveEvent(hook, event("leave-requested"));
+    expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "nobody" });
+    const other = setup({ hr: fakeHr({ views: { [REQUEST]: view({ state: "rejected" }) } }) });
+    await connected(other.ctx);
+    await onLeaveEvent(other.ctx.as(CONSOLE), event("leave-rejected"));
+    expect(other.ctx.all("deliveries")[0]?.data).toMatchObject({
+      outcome: "skipped",
+      note: "no_thread",
+    });
+    expect(slack.calls).toHaveLength(0);
+    expect(other.slack.calls).toHaveLength(0);
+  });
+
   it("says the role HR was not asked to grant is missing", async () => {
     const { ctx, slack } = setup({ grants: [], hr: fakeHr({ views: {} }) });
     await connected(ctx);

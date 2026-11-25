@@ -826,7 +826,9 @@ export async function onLeaveEvent(ctx: PluginContext, event: PluginHookEvent): 
         : ((await appOf(ctx))?.data.language ?? "en"),
     };
     const said = await tell(telling, leaveEvent);
-    await deliver(ctx, event, "sent", said, requestId);
+    // Nobody of it in Slack, or the end of what was never told there: nothing was sent.
+    const unsaid = said === "nobody" || said === "no_thread";
+    await deliver(ctx, event, unsaid ? "skipped" : "sent", said, requestId);
   } catch (error) {
     await deliver(ctx, event, "failed", describe(error), requestId);
     throw error;

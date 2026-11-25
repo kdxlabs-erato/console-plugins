@@ -1265,7 +1265,11 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
   }
   const connected = await connectionsOf(ctx);
   if (connected.length === 0) {
-    await deliver(ctx, event, "skipped", "not_connected", thing);
+    if (told.length > 0) {
+      await deliver(ctx, event, "skipped", "not_connected", thing);
+    } else if (ofAgent) {
+      await deliver(ctx, event, "skipped", "nobody", thing);
+    }
     return;
   }
   try {
@@ -1294,14 +1298,16 @@ export async function onOwnWork(ctx: PluginContext, event: PluginHookEvent): Pro
     // Kept once whoever was to be told was, and where the console told nobody: the limit stands
     // as said either way, and the same one said again tells nothing.
     await limit.told();
-    await deliver(
-      ctx,
-      event,
-      sent.length === 0 ? "skipped" : "sent",
-      sent.length === 0 ? "nobody" : `told:${sent.length}`,
-      thing,
-      sent,
-    );
+    if (sent.length > 0) {
+      await deliver(ctx, event, "sent", `told:${sent.length}`, thing);
+    } else if (found.length > 0) {
+      // The console told someone: none of them has an account here, or all keep it out of Slack.
+      await deliver(ctx, event, "skipped", "unreached", thing);
+    } else if (ofAgent || before !== null) {
+      // For nobody: nothing is kept of what happened on a board. An agent account's line, which is
+      // not listed, keeps the same delivery from being followed twice; a failed one is closed.
+      await deliver(ctx, event, "skipped", "nobody", thing);
+    }
   } catch (error) {
     await deliver(ctx, event, "failed", describe(error), thing, sent);
     throw error;

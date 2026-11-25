@@ -7,6 +7,7 @@ import { NOTIFICATION_KINDS } from "@skillcdn/console/api";
 import { defineCollection, type PluginHookEvent, z } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
 import {
+  type ActivityRow,
   NOTICE_CHOICES,
   NOTICE_GROUPS,
   NOTICE_KINDS,
@@ -14,7 +15,9 @@ import {
   type ProjectNoticesView,
 } from "../shared/contracts.js";
 import {
+  activity,
   day,
+  deliveries,
   dueDay,
   notices,
   notify,
@@ -30,6 +33,7 @@ import {
   fakeSlack,
   HANA,
   JIHYE,
+  KEEPER,
   linked,
   MEMBER_MINSU,
   MINSU,
@@ -189,7 +193,6 @@ describe("a task's events", () => {
     // Jihye owns the task and Minsu works on it: the console told neither, so neither is sent it.
     await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, []));
     expect(slack.calls).toHaveLength(0);
-    expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "nobody" });
     // An agent account learned of it by the console's own wake.
     await onOwnWork(
       hook,
@@ -203,6 +206,8 @@ describe("a task's events", () => {
       data: { actor: brief(HANA), agent: null, number: 12, excerpt: "Hi" },
     });
     expect(slack.calls).toHaveLength(0);
+    // Nothing was sent, and nothing is kept of what happened on the board.
+    expect(ctx.all("deliveries")).toHaveLength(0);
   });
 
   it("reads whom the console told as data: what is no list, no entry or no kind tells nobody", async () => {
@@ -381,7 +386,75 @@ describe("a task's events", () => {
       ]),
     );
     expect(slack.calls).toHaveLength(0);
-    expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "nobody" });
+    expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "unreached" });
+    // Neither where it is not connected is anything kept of an event that was for nobody.
+    await onOwnWork(
+      quiet.ctx.as(CONSOLE),
+      event("task.moved", { taskId: task().id, number: 12, from: "ready", to: "done" }),
+    );
+    expect(quiet.ctx.all("deliveries")).toHaveLength(1);
+  });
+
+  it("keeps whom a message reached only while it has others to reach", async () => {
+    const { hook, ctx } = await ready();
+    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, BOTH));
+    const line = ctx.all("deliveries")[0]?.data;
+    expect(line).toMatchObject({ outcome: "sent", note: "told:2" });
+    // Whom it reached is theirs: a line says how many.
+    expect(JSON.stringify(line)).not.toContain(MINSU.id);
+    expect(JSON.stringify(line)).not.toContain(JIHYE.id);
+  });
+});
+
+describe("the log of what was sent", () => {
+  it("says when, what kind, how it went and why, and never whose it was or what it was about", async () => {
+    const { hook, ctx } = await ready();
+    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, BOTH));
+    await onOwnWork(
+      hook,
+      event("task.commented", { taskId: task().id, number: 12, excerpt: "Hi" }, [
+        told(HANA, "commented"),
+      ]),
+    );
+    const lines = (await activity.run(ctx.as(KEEPER), {})) as ActivityRow[];
+    expect(lines.map((line) => line.note).sort()).toEqual(["told:2", "unreached"]);
+    for (const line of lines) {
+      expect(Object.keys(line).sort()).toEqual(["at", "attempt", "id", "kind", "note", "outcome"]);
+    }
+    const said = JSON.stringify(lines);
+    for (const word of [task().id, PROJECT.id, PROJECT.key, MINSU.id, JIHYE.id, HANA.id, "Ship"]) {
+      expect(said).not.toContain(word);
+    }
+  });
+
+  it("lists nothing of an event that was for nobody, one kept by an earlier version among them", async () => {
+    const { hook, ctx } = await ready();
+    // An account the console told nobody of: a line keeps the event from being followed twice.
+    await onOwnWork(hook, event("agent.state_changed", { login: "acme-otis", state: "idle" }));
+    const old = (note: string, at: string, kind = "console:task.moved") => ({
+      eventId: `${kind}${at}`,
+      kind,
+      thing: task().id,
+      outcome: "skipped" as const,
+      note,
+      attempt: 1,
+      at,
+    });
+    for (let minute = 0; minute < 60; minute += 1) {
+      const at = `2026-11-20T09:${String(minute).padStart(2, "0")}:00.000Z`;
+      await ctx.records(deliveries).create(old("nobody", at));
+    }
+    await ctx.records(deliveries).create(old("not_connected", "2026-11-19T09:00:00.000Z"));
+    await ctx
+      .records(deliveries)
+      .create(old("nobody", "2026-11-18T09:00:00.000Z", "plugin:hr:leave-requested"));
+    const lines = (await activity.run(ctx.as(KEEPER), { limit: 5 })) as ActivityRow[];
+    // What stands behind sixty of them is reached, and a request of leave nobody has in Slack is told.
+    expect(lines.map((line) => [line.kind, line.note])).toEqual([
+      ["console:task.moved", "not_connected"],
+      ["plugin:hr:leave-requested", "nobody"],
+    ]);
+    expect((await activity.run(ctx.as(KEEPER), { limit: 1 })) as ActivityRow[]).toHaveLength(1);
   });
 });
 

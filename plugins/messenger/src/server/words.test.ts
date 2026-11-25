@@ -1,7 +1,9 @@
 // A Korean sentence that carries a name writes the particle in the one form the name takes, as the
 // console's own Korean does (the console's ADR-0137), and never both forms.
 import { describe, expect, it } from "vitest";
+import { NOTES } from "../shared/contracts.js";
 import { wordsFor } from "../web/words.js";
+import { LEAVE_EVENTS, OWN_WORK_EVENTS } from "./index.js";
 import { serverWords } from "./words.js";
 
 const BOTH_FORMS = /\((을|를|이|가|은|는|으)\)/u;
@@ -25,6 +27,26 @@ function textsOf(value: unknown, depth = 0): string[] {
   }
   return [];
 }
+
+describe("the log of what was sent", () => {
+  it.each(["en", "ko"])("has a word in %s for every event that leaves a line", (language) => {
+    const { kinds } = wordsFor(language).activity;
+    const events = [
+      ...OWN_WORK_EVENTS.map((kind) => `console:${kind}`),
+      ...LEAVE_EVENTS.map((kind) => `plugin:hr:${kind}`),
+    ];
+    expect(Object.keys(kinds).sort()).toEqual(events.sort());
+  });
+
+  it.each(["en", "ko"])("has a word in %s for every note a line carries", (language) => {
+    const { notes } = wordsFor(language).activity;
+    expect(Object.keys(notes).sort()).toEqual([...NOTES].sort());
+    expect(notes.told("1")).toContain("1");
+    expect(notes.told("2")).toContain("2");
+    // A task nobody takes in Slack is no request of leave.
+    expect(notes.unreached("")).not.toBe(notes.nobody(""));
+  });
+});
 
 describe("the particle after a name in Korean", () => {
   const ko = serverWords("ko");

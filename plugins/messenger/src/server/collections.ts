@@ -5,9 +5,14 @@
 // by the matching; a thread per thing told, what was written about it and where; and the
 // deliveries, a line per event heard, forgotten after a month. Every schema bounds what it holds,
 // since what Slack and other plugins answer is data from elsewhere.
+//
+// The console's own record routes answer none of them to whoever keeps the messenger, who reads what
+// the role needs through the queries: whom a message reached, who asked for leave and who decided it
+// are kept to carry the messages, and are not the keeper's to read (ADR-0019). A member reads their
+// own choice and what waits for them, and an administrator, as everywhere, every record.
 import { defineCollection, z } from "@skillcdn/console/plugin";
 import { CADENCES, LANGUAGES, NOTICE_KINDS, ROUTE_AS, ROUTE_KINDS } from "../shared/contracts.js";
-import { MEMBER, ROLE } from "./access.js";
+import { MEMBER } from "./access.js";
 
 const id = z.string().min(1).max(64);
 const instant = z.string().min(1).max(40);
@@ -60,7 +65,6 @@ export const apps = defineCollection("apps", {
     rotatedAt: instant.nullable(),
   }),
   indexes: ["provider"],
-  read: [ROLE],
 });
 
 export const connections = defineCollection("connections", {
@@ -93,7 +97,6 @@ export const connections = defineCollection("connections", {
     unmatched: z.number().int().min(0),
   }),
   indexes: ["teamId", "state"],
-  read: [ROLE],
 });
 
 export const routes = defineCollection("routes", {
@@ -107,7 +110,6 @@ export const routes = defineCollection("routes", {
     as: z.enum(ROUTE_AS),
   }),
   indexes: ["kind", "channelId", "teamId"],
-  read: [ROLE],
 });
 
 export const links = defineCollection("links", {
@@ -124,7 +126,6 @@ export const links = defineCollection("links", {
   }),
   indexes: ["personId", "memberId", "teamId"],
   owner: "personId",
-  read: [ROLE],
   history: false,
 });
 
@@ -170,7 +171,6 @@ export const threads = defineCollection("threads", {
     state: z.enum(["open", "approved", "rejected", "returned", "cancelled"]),
   }),
   indexes: ["thing", "state", "teamId"],
-  read: [ROLE],
   history: false,
   retention: { days: 400, by: "updatedAt" },
 });
@@ -182,13 +182,15 @@ export const deliveries = defineCollection("deliveries", {
     thing: id.nullable(),
     outcome: z.enum(["sent", "skipped", "failed"]),
     note: z.string().max(300),
-    /** Whom an event was told to already, as `<person>:<kind>`, so that a retry tells nobody twice. */
+    /**
+     * Whom an event that failed part way was told to already, as `<person>:<kind>`, so that a retry
+     * tells nobody twice; nobody once it went.
+     */
     told: z.array(z.string().max(100)).max(TOLD_AT_MOST).optional(),
     attempt: z.number().int().min(1).max(100),
     at: instant,
   }),
   indexes: ["eventId", "at", "outcome"],
-  read: [ROLE],
   history: false,
   retention: { days: 30 },
 });
@@ -296,7 +298,6 @@ export const silences = defineCollection("silences", {
     tell: z.array(id).max(TOLD_AT_MOST),
   }),
   indexes: ["personId"],
-  read: [ROLE],
   history: false,
   // Put away is only hidden: a silence a minute long is one more record each time, so what has
   // not changed for a month goes, a silence still open that long with it.
@@ -325,7 +326,6 @@ export const limits = defineCollection("limits", {
     tell: z.array(id).max(TOLD_AT_MOST),
   }),
   indexes: ["personId"],
-  read: [ROLE],
   history: false,
   retention: { days: 30, by: "updatedAt" },
 });

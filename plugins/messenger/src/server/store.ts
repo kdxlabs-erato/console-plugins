@@ -289,7 +289,10 @@ export async function alreadyDone(ctx: PluginContext, event: PluginHookEvent): P
   return found !== null && found.data.outcome !== "failed";
 }
 
-/** Keeps what became of an event, one line per event, the last attempt's. */
+/**
+ * Keeps what became of an event, one line per event, the last attempt's. Whom it reached already is
+ * kept of one that failed alone, for the try that follows.
+ */
 export async function deliver(
   ctx: PluginContext,
   event: PluginHookEvent,
@@ -304,7 +307,7 @@ export async function deliver(
     thing,
     outcome,
     note: note.slice(0, 300),
-    ...(told === undefined ? {} : { told: told.slice(0, 100).map((key) => key.slice(0, 100)) }),
+    told: (told ?? []).slice(0, 100).map((key) => key.slice(0, 100)),
     attempt: Math.min(Math.max(event.attempt, 1), 100),
     at: ctx.now().toISOString(),
   };

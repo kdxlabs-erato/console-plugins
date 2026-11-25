@@ -59,7 +59,7 @@ To start again with a new app, as from a workspace kept for trying the plugin to
 
 ## When a message did not go out
 
-- `activity --outcome failed` says what Slack or the console answered, and `activity --outcome skipped` why an event was passed over: Slack not connected, HR's api off, the role not granted, nobody in Slack to tell.
+- `activity --outcome failed` says what Slack or the console answered, and `activity --outcome skipped` why an event was passed over: Slack not connected, HR's api off, the role not granted, nobody in Slack to tell. A line says when, of which kind, how it went and why, and never whose it was, which project's or what it was about: whoever keeps the messenger need not see them. Which task or decision one failed on is an administrator's to look up (`console plugin messenger records deliveries`).
 - Someone gets nothing: `people` says whether they are matched, and in which workspaces; a person with no email in the console, or with another address in Slack, is not. A channel is told only of people with an account in its workspace.
 - Someone gets nothing of their own work, their tasks, decisions or agent accounts: the messenger sends on only what the console told them of, so the kind is on in the console's own settings first, which are theirs (`console notify`, or a task's bell), and not kept out of Slack by them (`console plugin messenger notices`, theirs too). A person who chose nothing in the console is told of their agent accounts alone. An agent account is sent nothing here: the console wakes it itself.
 - A workspace says nothing at all: `status` lists the workspaces the app is in, each with its bot token as the console holds it; one missing was taken away, by `disconnect` or in Slack.
