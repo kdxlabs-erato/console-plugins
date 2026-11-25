@@ -194,7 +194,7 @@ What the administrator does, which the hand-over task quotes:
 
 ## What the deployment must provide
 
-Nothing beyond the console: no `storage:sql`, no outbound host; the pictures of announcements are the console's files, kept where it keeps every file. The manifest's `console` says the consoles it runs on, `>=0.6.1 <0.7.0` ([ADR-0006](../../docs/adr/0006-a-plugin-has-a-version-of-its-own-and-declares-the-consoles-it-runs-on.md)): 0.6.1 is the first console that reads the mark of the project made for a plugin. A deployment that took 0.3 has its kinds' rules of cancelling written by the upgrade to data version 3 when it moves.
+Nothing beyond the console: no `storage:sql`, no outbound host; the pictures of announcements are the console's files, kept where it keeps every file. The manifest's `console` says the consoles it runs on, `>=0.6.1 <0.7.0` ([ADR-0006](../../docs/adr/0006-a-plugin-has-a-version-of-its-own-and-declares-the-consoles-it-runs-on.md)): 0.6.1 is the first console that reads the mark of the project made for a plugin, and the first whose stylesheet draws the pack's glyphs as the announcement editor's tools wear them. A deployment that took 0.3 has its kinds' rules of cancelling written by the upgrade to data version 3 when it moves.
 
 ## The pages
 

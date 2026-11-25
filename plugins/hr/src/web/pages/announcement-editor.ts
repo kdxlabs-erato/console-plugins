@@ -4,6 +4,7 @@
 // every so often, since a frame has nowhere of its own to keep anything and the console's tabs leave
 // without asking. A picture is drawn again before it is sent, smaller where it is large: that also
 // leaves behind what a camera wrote into the file, the place it was taken among them.
+import { type IconName, iconElement } from "@skillcdn/console/icons";
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import { baseKeymap, lift, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { history, redo, redoDepth, undo, undoDepth } from "prosemirror-history";
@@ -297,41 +298,11 @@ function placeholder(words: Words): Plugin {
   });
 }
 
-const ICON_NAMESPACE = "http://www.w3.org/2000/svg";
-
-const ICONS = {
-  bullets: ["M9 6h11M9 12h11M9 18h11", "M4.5 6h.01M4.5 12h.01M4.5 18h.01"],
-  numbers: [
-    "M10 6h10M10 12h10M10 18h10",
-    "M4 5l1.5-1v6M4 14.5c.6-1.6 3-1.4 3 .1 0 1.3-3 2.3-3 4.4h3",
-  ],
-  quote: ["M9 7c-3 1-4 3-4 6v4h5v-5H6.5", "M19 7c-3 1-4 3-4 6v4h5v-5h-3.5"],
-  divider: ["M4 12h16"],
-  link: [
-    "M10 14a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 5.3l-1 1",
-    "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
-  ],
-  picture: ["M4 5h16v14H4z", "M4 16l5-5 4 4 3-3 4 4", "M15.5 9h.01"],
-  undo: ["M9 7l-5 5 5 5", "M4 12h11a5 5 0 0 1 5 5"],
-  redo: ["M15 7l5 5-5 5", "M20 12H9a5 5 0 0 0-5 5"],
-} as const;
-
-function icon(name: keyof typeof ICONS): SVGElement {
-  const node = document.createElementNS(ICON_NAMESPACE, "svg");
-  node.setAttribute("viewBox", "0 0 24 24");
-  node.setAttribute("fill", "none");
-  node.setAttribute("stroke", "currentColor");
-  node.setAttribute("stroke-width", "1.8");
-  node.setAttribute("stroke-linecap", "round");
-  node.setAttribute("stroke-linejoin", "round");
-  node.setAttribute("aria-hidden", "true");
-  for (const shape of ICONS[name]) {
-    const path = document.createElementNS(ICON_NAMESPACE, "path");
-    path.setAttribute("d", shape);
-    node.append(path);
-  }
-  return node;
-}
+/**
+ * A tool's face: a glyph of the console's icon pack by its name, at the size one stands by
+ * itself, drawn from the pack's data as the console draws it and coloured by its stylesheet.
+ */
+const icon = (name: IconName): SVGSVGElement => iconElement(name, { size: "md" });
 
 function tool(label: string, face: Node, press: () => void): HTMLButtonElement {
   const node = el("button", "tool");
@@ -740,20 +711,20 @@ export function announcementEditor(options: EditorOptions): OpenEditor {
     markTool("highlight", words.tools.highlight, el("span", "tool-highlight", "A")),
     gap(),
     lit(
-      tool(words.tools.bullets, icon("bullets"), run(toggleList(schema.nodes.bullet_list))),
+      tool(words.tools.bullets, icon("list"), run(toggleList(schema.nodes.bullet_list))),
       () => inList(view.state)?.node.type === schema.nodes.bullet_list,
     ),
     lit(
-      tool(words.tools.numbers, icon("numbers"), run(toggleList(schema.nodes.ordered_list))),
+      tool(words.tools.numbers, icon("list-numbered"), run(toggleList(schema.nodes.ordered_list))),
       () => inList(view.state)?.node.type === schema.nodes.ordered_list,
     ),
     lit(tool(words.tools.quote, icon("quote"), run(toggleQuote)), () => inQuote(view.state)),
-    tool(words.tools.divider, icon("divider"), run(insertDivider)),
+    tool(words.tools.divider, icon("minus"), run(insertDivider)),
     gap(),
     lit(tool(words.tools.link, icon("link"), openLink), () =>
       markIsOn(view.state, schema.marks.link),
     ),
-    tool(words.tools.picture, icon("picture"), () => {
+    tool(words.tools.picture, icon("image"), () => {
       chooser.click();
     }),
     gap(),

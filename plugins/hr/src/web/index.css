@@ -2206,11 +2206,6 @@
   cursor: pointer;
 }
 
-.pl-hr-tool svg {
-  width: 1.15rem;
-  height: 1.15rem;
-}
-
 .pl-hr-tool:hover:not(:disabled) {
   background: var(--sc-color-sheet-hover);
   color: var(--sc-color-text);
