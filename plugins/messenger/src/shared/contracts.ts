@@ -292,6 +292,19 @@ export const FOLLOWED = "followed";
 export const NOTICE_CHOICES = [...NOTICE_KINDS, FOLLOWED] as const;
 export type NoticeChoice = (typeof NOTICE_CHOICES)[number];
 
+/**
+ * The choices in the groups and the order of the console's own settings, so that a kind stands in
+ * the same place on both pages; after them the tasks a member turned on themselves, which are no
+ * kind and come whatever the kinds say.
+ */
+export const NOTICE_GROUPS = {
+  tasks: ["assigned", "ready", "commented", "moved", "changed", "archived"],
+  decisions: ["decision", "answered"],
+  agents: ["agent"],
+  followed: [FOLLOWED],
+} as const satisfies Readonly<Record<string, readonly NoticeChoice[]>>;
+export type NoticeGroup = keyof typeof NOTICE_GROUPS;
+
 /** Where a member chooses what they are told at all: the console's own settings, by its path. */
 export const CONSOLE_NOTIFICATIONS_PATH = "/settings/notifications";
 

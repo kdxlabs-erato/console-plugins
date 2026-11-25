@@ -582,7 +582,7 @@ const KO: ServerWords = {
     notPending: (team) => `수락을 기다리는 워크스페이스 중에 ${asSubject(team)} 없습니다.`,
     busy: "그사이 앱 기록이 계속 바뀌었습니다. 다시 시도하세요.",
     noticeAt: "하루 알림 시각은 09:00처럼 HH:MM으로 씁니다.",
-    noticeBoth: (kinds) => `${asObject(kinds)} 켜고 끄기를 함께 할 수 없습니다.`,
+    noticeBoth: (kinds) => `${asObject(kinds)} 활성화와 비활성화를 함께 할 수 없습니다.`,
   },
   said: {
     appMade: (url) =>
@@ -770,7 +770,7 @@ const KO: ServerWords = {
       decision: "내 답을 기다리는 결정",
       answered: "내 질문의 답변",
       agent: "내 에이전트 계정",
-      followed: "알림을 켠 작업",
+      followed: "직접 활성화한 작업",
     },
     nothing: "없음",
     now: "그때그때",
@@ -826,7 +826,7 @@ const KO: ServerWords = {
     },
     open: "콘솔에서 열기",
     choose: "Slack으로 받을 알림 정하기",
-    turnOff: (kind) => `${kind} 알림 끄기`,
+    turnOff: (kind) => `${kind} 알림 비활성화`,
     turnedOff: (kind, page) =>
       `이제 ${kind} 알림을 Slack으로 보내지 않습니다. 콘솔의 알림 목록에는 그대로 남습니다. ${page}`,
     dayTitle: (count) => `오늘의 알림 ${count}건`,

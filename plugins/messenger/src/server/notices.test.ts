@@ -6,7 +6,13 @@
 import { NOTIFICATION_KINDS } from "@skillcdn/console/api";
 import { defineCollection, type PluginHookEvent, z } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
-import { NOTICE_KINDS, type NoticesView, type ProjectNoticesView } from "../shared/contracts.js";
+import {
+  NOTICE_CHOICES,
+  NOTICE_GROUPS,
+  NOTICE_KINDS,
+  type NoticesView,
+  type ProjectNoticesView,
+} from "../shared/contracts.js";
 import {
   day,
   dueDay,
@@ -1302,6 +1308,13 @@ describe("the kinds", () => {
     // the messenger has no words for until this list has it.
     expect([...NOTICE_KINDS]).toEqual([...NOTIFICATION_KINDS]);
   });
+
+  it("stand in one group of the page each, with the tasks a member turned on", () => {
+    // Saving the page names every choice on or off, so one that stood in no group would be turned
+    // off by it, and one that stood in two would be both.
+    const grouped = Object.values(NOTICE_GROUPS).flat();
+    expect([...grouped].sort()).toEqual([...NOTICE_CHOICES].sort());
+  });
 });
 
 describe("notify and notices", () => {
@@ -1331,7 +1344,7 @@ describe("notify and notices", () => {
     const said = await notify.run(ctx, { off: ["followed", "moved"] });
     // The answer reads back what is kept out, for an agent that chose it.
     expect(said.text).toBe(
-      "콘솔이 알려 주는 것을 Slack으로 그때그때 보냅니다. Slack으로 보내지 않는 것: 상태 변경, 알림을 켠 작업.",
+      "콘솔이 알려 주는 것을 Slack으로 그때그때 보냅니다. Slack으로 보내지 않는 것: 상태 변경, 직접 활성화한 작업.",
     );
     const after = (await notices.run(ctx, {})) as NoticesView;
     expect(after).toMatchObject({ chosen: true, kinds: { moved: false, followed: false } });

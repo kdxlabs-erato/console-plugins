@@ -242,23 +242,15 @@ export function settingsForm(...children: HTMLElement[]): HTMLFormElement {
 }
 
 /**
- * One setting of a settings form: its name and its hint in a narrow column, its controls taking
- * the rest of the pane, so that a row of chips runs along the row rather than down it.
+ * One setting of a settings form: its name in a narrow column, its controls taking the rest of the
+ * pane, so that a row of chips runs along the row rather than down it. What a person must know of
+ * a setting is said over the form, where a sentence has the pane's width.
  */
-export function settingsRow(
-  label: string,
-  hint: string | undefined,
-  ...controls: HTMLElement[]
-): HTMLDivElement {
+export function settingsRow(label: string, ...controls: HTMLElement[]): HTMLDivElement {
   const node = el("div", "sc-settings-row setting");
-  const text = el("div");
-  text.append(el("span", "sc-settings-label", label));
-  if (hint !== undefined) {
-    text.append(el("p", "sc-settings-hint", hint));
-  }
   const control = el("div", "sc-settings-control");
   control.append(...controls);
-  node.append(text, control);
+  node.append(el("span", "sc-settings-label", label), control);
   return node;
 }
 
@@ -373,6 +365,11 @@ export function callout(
   }
   node.append(text);
   return node;
+}
+
+/** The sentence that begins a form, over its rows, as the console's own settings begin. */
+export function lead(text: string): HTMLParagraphElement {
+  return el("p", "sc-lead", text);
 }
 
 export function muted(text: string): HTMLParagraphElement {

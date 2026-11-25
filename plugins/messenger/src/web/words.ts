@@ -9,6 +9,7 @@ import type {
   MatchState,
   NoteCode,
   NoticeChoice,
+  NoticeGroup,
   Outcome,
   RouteAs,
   RouteKind,
@@ -165,8 +166,9 @@ export interface Words {
     readonly lead: string;
     readonly noAccount: Note;
     readonly choose: string;
-    readonly what: string;
-    readonly whatHint: string;
+    readonly chooseHint: string;
+    readonly openConsole: string;
+    readonly groups: Readonly<Record<NoticeGroup, string>>;
     readonly kinds: Readonly<Record<NoticeChoice, string>>;
     readonly when: string;
     readonly cadences: Readonly<Record<Cadence, string>>;
@@ -174,9 +176,6 @@ export interface Words {
     readonly atHint: (zone: string) => string;
     readonly save: string;
     /** The console's own settings, where what one is told at all is chosen. */
-    readonly console: string;
-    readonly consoleHint: string;
-    readonly openConsole: string;
     readonly where: string;
     readonly workspace: string;
     readonly nowhere: string;
@@ -437,9 +436,15 @@ const EN: Words = {
       body: "None is matched in a workspace the app is in, so nothing reaches you yet: the address in Slack is the one the console knows for you.",
     },
     choose: "What, and when",
-    what: "Send to Slack",
-    whatHint:
-      "Only what the console tells you is sent: a kind that is off in the console's notification settings sends nothing, whatever stands here. Each message has a button that turns its kind off.",
+    chooseHint:
+      "What is off in the console stays off in Slack. Turn it on in its notification settings, or by a task's bell.",
+    openConsole: "Console notification settings",
+    groups: {
+      tasks: "Tasks",
+      decisions: "Decisions",
+      agents: "Agent accounts",
+      followed: "Tasks whose bell is on",
+    },
     kinds: {
       assigned: "Given to you",
       ready: "Ready to begin",
@@ -450,17 +455,13 @@ const EN: Words = {
       decision: "Waits for your answer",
       answered: "Your question was answered",
       agent: "Your agent account",
-      followed: "Tasks you turned on",
+      followed: "Everything on them",
     },
     when: "When",
     cadences: { now: "As it happens", daily: "Once a day" },
     at: "At",
     atHint: (zone) => `In the workspace's time zone, ${zone}, within a few minutes after.`,
     save: "Save",
-    console: "What you are told",
-    consoleHint:
-      "The console decides what you are told at all: each kind, a project turned off, a task's bell. Turn a kind on there first; it reaches Slack too unless it is off here.",
-    openConsole: "Notification settings",
     where: "Where",
     workspace: "Workspace",
     nowhere: "Nowhere yet.",
@@ -759,9 +760,15 @@ const KO: Words = {
       body: "앱이 설치된 워크스페이스에 내 계정이 연결되어 있지 않아 아직 아무것도 받지 못합니다. Slack의 이메일이 콘솔에 있는 내 이메일과 같아야 합니다.",
     },
     choose: "무엇을, 언제",
-    what: "Slack으로 받을 것",
-    whatHint:
-      "콘솔이 알려 주는 것만 보냅니다. 콘솔의 알림 설정에서 꺼 둔 종류는 여기서 켜도 오지 않습니다. 메시지마다 그 종류를 끄는 버튼이 있습니다.",
+    chooseHint:
+      "콘솔에서 비활성화된 알림은 Slack으로도 오지 않습니다. 콘솔 알림 설정이나 작업의 종에서 활성화할 수 있습니다.",
+    openConsole: "콘솔 알림 설정",
+    groups: {
+      tasks: "작업",
+      decisions: "결정",
+      agents: "에이전트 계정",
+      followed: "직접 활성화한 작업",
+    },
     kinds: {
       assigned: "나에게 맡겨짐",
       ready: "시작할 수 있음",
@@ -772,17 +779,13 @@ const KO: Words = {
       decision: "내 답을 기다리는 결정",
       answered: "내 질문에 답변",
       agent: "내 에이전트 계정",
-      followed: "알림을 켠 작업",
+      followed: "모든 소식",
     },
     when: "언제",
     cadences: { now: "그때그때", daily: "하루 한 번" },
     at: "시각",
     atHint: (zone) => `워크스페이스 시간대(${zone}) 기준이며, 그 시각부터 몇 분 안에 보냅니다.`,
     save: "저장",
-    console: "알림으로 받을 것",
-    consoleHint:
-      "무엇을 알림으로 받을지는 콘솔에서 정합니다. 종류, 끈 프로젝트, 작업마다의 종이 거기에 있습니다. 거기서 먼저 켜면, 여기서 끄지 않는 한 Slack으로도 옵니다.",
-    openConsole: "알림 설정",
     where: "받는 곳",
     workspace: "워크스페이스",
     nowhere: "아직 없음.",
