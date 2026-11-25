@@ -4,7 +4,7 @@ A plugin is written as the console's skill [building-a-plugin](https://github.co
 
 ## A new plugin
 
-1. **Design it first.** Phase 1 of the skill: one table, a row per thing the feature does, saying who starts it (an agent for a person, a person on a page, the console on an event or a schedule, an outside service) and what it becomes (a command, a query, a decision, a task, a hook, a job, an endpoint, a page, a widget, a skill); then the collections with their fields, the roles, the settings, the board, the menu group, and the capabilities each read as the sentence an administrator will consent to. Show it to the person and stop; nothing is written before they say so. The table becomes the "The design" section of the plugin's README ([conventions.md](conventions.md), "The design in the README").
+1. **Design it first.** Phase 1 of the skill: one table, a row per thing the feature does, saying who starts it (an agent for a person, a person on a page, the console on an event or a schedule, an outside service) and what it becomes (a command, a query, a decision, a task, a hook, a job, an endpoint, a page, a widget, a skill); then the collections with their fields, the roles, the settings, the board, the menu group, the capabilities each read as the sentence an administrator will consent to, and who reads what, door by door. Show it to the person and stop; nothing is written before they say so. The table becomes the "The design" section of the plugin's README ([conventions.md](conventions.md), "The design in the README").
 2. **Write it from the template.** From the root, with the key the design settled (the contract's rules and reserved words apply, and `console-plugin init` refuses a bad one):
 
    ```sh
@@ -21,7 +21,8 @@ A plugin is written as the console's skill [building-a-plugin](https://github.co
    - `SKILLCDN.md`: `translations.ko` translated; `metadata.author`.
    - `skills/<key>/SKILL.md`: `skillcdn.translations.ko` translated; `metadata.author`.
    - `src/web/words.ts` and `src/web/index.ts`: the words the pages show, in both languages, chosen by `frame.context.language` ([ADR-0004](../adr/0004-every-plugin-speaks-english-and-korean-from-its-first-commit.md)).
-   - `README.md`: written from the design ([conventions.md](conventions.md), "A plugin's README").
+   - `README.md`: written from the design ([conventions.md](conventions.md), "A plugin's README"), its section "Who reads what" with it.
+   - `src/server/readers.test.ts`: copied from `plugins/hello`, unchanged; it holds that section to the code. The template's event carries the greeted's name: what an event carries is the id of a record ([conventions.md](conventions.md#who-reads-what)).
    - `.gitignore`, `build.mjs` and `src/check.test.ts` stay as the template wrote them.
 4. **List it.** A row in the table of the root `README.md`, linking `plugins/<key>/`, and its entry in [docs/roadmap.md](../roadmap.md), moved from Next to In progress, and into What exists once it is published; the two checks of `scripts/check-plugins.mjs` that read them fail otherwise.
 5. **Check the shape before the first line of logic.** `pnpm check` is green with the template adapted; commit it as `feat(<key>): the <key> plugin, from the template`, so that the design's work starts from a plugin the checks accept.

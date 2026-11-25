@@ -11,7 +11,7 @@ What this repository asks of a plugin on top of the console's contract ([docs/sp
 
 ## The design in the README
 
-A plugin's README carries the table of phase 1, and the manifest and the tests are read against it: one row per thing the feature does, with who starts it, what it is in the plugin and the test that proves it. Under the table, in a paragraph each: the collections with their fields, indexes, owner and readers; the roles; the capabilities, each with the sentence the administrator consents to; the board (`needs`, the defaults); the settings; the menu group, the pages and the widgets. A capability without a row that needs it is not in the manifest; a row without a test is not done.
+A plugin's README carries the table of phase 1, and the manifest and the tests are read against it: one row per thing the feature does, with who starts it, what it is in the plugin and the test that proves it. Under the table, in a paragraph each: the collections with their fields, indexes, owner and readers; the roles; the capabilities, each with the sentence the administrator consents to; the board (`needs`, the defaults); the settings; the menu group, the pages and the widgets; and who reads what, a row for each door the data leaves by ("Who reads what"). A capability without a row that needs it is not in the manifest; a row without a test is not done.
 
 ## A plugin's README
 
@@ -44,6 +44,25 @@ Every plugin speaks the languages the repository speaks: English first, and Kore
 - A collection's `schema` is `z` from `@skillcdn/console/plugin`; `indexes` are only the fields that are filtered, ordered or aggregated by; `search` only what people search as words; `owner` the field that holds a person's id, with `readOwn` for the roles that see their own; `history` as the contract defaults it, unless the design says the versions are noise.
 - A value an administrator decides for the workspace is a setting (a secret, a host, what must be known when the plugin is enabled); what a role of the plugin decides is a record of the plugin, written by a command of that role, since the console's settings page is an administrator's alone; a value per project or per person is a record, linked to the project or owned by the person. A plugin never keeps a value in module state.
 
+## Who reads what
+
+A plugin's data leaves it by more doors than its queries, and each is opened to the role whose work needs what is behind it ([ADR-0019](../adr/0019-what-a-plugin-holds-is-read-door-by-door-by-whoever-its-work-needs-it.md)). The README's section **Who reads what** has a row for each door that is open, and `src/server/readers.test.ts`, a copy of `plugins/hello`'s, holds the rows on the records and on the words given to a command to the code.
+
+| Door | Who reads it | What is asked of it |
+|---|---|---|
+| A collection's records, `console plugin <key> records` and `frame.records` | its `read` roles, whole; its `readOwn` roles, their own; an administrator, all of them. By project only where the record is linked to one | no `read` unless someone reads it there. Where a query answers a holder of the role less than the record holds, the record is closed to the role. Keeping a service is no reason to read what it carries |
+| A query, a command's `text` and `data` | its `roles`, as the code answers them | field by field, what this caller may see; what they may not is answered as if it were not there; a refusal says no figure they may not read |
+| An event emitted, `ctx.events.emit` | whoever holds **any** role of the plugin, for ninety days (`GET .../plugin-events`), and the plugins with `events:plugins` | the id of one record, or nothing: never a person, a name, a key someone chose or a word someone wrote; nothing at all of what is one person's alone, as a draft is. No query answers that id to who may not read the record |
+| The event a command leaves, `plugin.command` | whoever sees the board project, for good; without one, an administrator and whoever ran it | every argument is kept in it: words a person writes are `secret`, and those kept are a row of the README. `arg.markdown` takes `{ ...arg.markdown(...), secret: true }` |
+| The board: a decision, a task, a document | whom a decision is for and those above them; the project's members | what they need to answer or to work; the README says who the project's members should be |
+| A file | whoever reads its record | a record of its own where the file's readers are not the record's |
+| The `api`, for other plugins | a plugin with `plugins:<key>`, under the roles the console gives its call | what the command or the query of the same name answers |
+| What leaves the console: a message, a request | whoever is at the other end | what they may read on the console; a channel is everyone in it |
+| The log, `ctx.log` | whoever runs the deployment | a code, a count, never a person or what they wrote |
+
+- What is not kept is read by nobody: a log's line says when, what kind, how it went and why, and keeps whom it reached only while a retry needs them, and which thing it was of only where whoever may open that thing looks into a failure.
+- A door is tried as someone who may not, in a test and on the preview before a release ([local-console.md](local-console.md)): a member with no other role, a holder of the role outside a private project, one holder beside what is another's alone.
+
 ## Capabilities, and secrets
 
 - Every capability in the manifest has a row of the design that needs it, read as the administrator's sentence; `people:read:all` and `projects:read:all` only where a job or a hook, which has no person, must see everyone or every project; `outbound:<host>` names the host exactly, `*.` only where the service's addresses vary; `storage:sql` by the rule above.
@@ -58,7 +77,7 @@ Every plugin speaks the languages the repository speaks: English first, and Kore
 
 ## Between plugins
 
-- What a plugin offers other plugins is its contract ([ADR-0010](../adr/0010-a-plugins-events-and-api-are-its-contract-with-other-plugins-and-a-plugin-calling-for-a-person-is-that-person.md)): its events, thin, the ids and the kind and nothing a holder of its roles may not read; its `api`, each entry the function a command or a query runs, under the caller's roles as `actorOf` reads them, never a path of its own; and the option keys of the decisions it raises. It is written in the README's section "The contract", with the order its events may come in, and a test holds the names and the fields the section gives to the definitions, as the skills are held.
+- What a plugin offers other plugins is its contract ([ADR-0010](../adr/0010-a-plugins-events-and-api-are-its-contract-with-other-plugins-and-a-plugin-calling-for-a-person-is-that-person.md)): its events, thin, the id of one record or nothing ("Who reads what"); its `api`, each entry the function a command or a query runs, under the caller's roles as `actorOf` reads them, never a path of its own; and the option keys of the decisions it raises. It is written in the README's section "The contract", with the order its events may come in, and a test holds the names and the fields the section gives to the definitions, as the skills are held.
 - A change to the contract is versioned as the plugin is: a field, an entry or a kind removed or renamed, or a key changed, is a `minor` with `Breaking:` first; an addition is a `patch`. A consumer names the range of the producer's versions it was written against, as the manifest names the console's.
 - A plugin caller acting for a person, once the console passes one, is that person: the same actor, in the person's language, under the roles the console gives the call, refused for coming through a plugin only for a security reason the design states and the README records. One acting for nobody is the roles it holds and no person, refused where a person is needed as a job is.
 
@@ -87,6 +106,8 @@ Every plugin speaks the languages the repository speaks: English first, and Kore
 
 - One test per row of the design, against `createTestContext` from `@skillcdn/console/plugin/testing`, with the collections the plugin declares: what the row does, what it refuses (a schema it does not fit, a role it lacks, a record another owns), what it tells people. `as(caller)` runs the same records as another person; `emitted` and `logged` say what the plugin said.
 - Every argument and schema has its hostile inputs: too long, too deep, malformed, what an agent could send on purpose.
+- Every door is tried as someone who may not read what is behind it ("Who reads what"), and what is answered to who may is held by its keys, so that a field added later is a decision.
+- `src/server/readers.test.ts` is `plugins/hello`'s and stays so, until two that differ make it worth sharing.
 - `src/check.test.ts` is the template's and stays so: the package built and read as a console reads it. `plugins/hr/src/server/skills.test.ts` holds every command line a skill names to the definitions; a plugin with commands of its own takes a copy, until two make it worth sharing.
 - No network, no database, nothing of a console running in a test; a console of this machine is for a person's eyes ([local-console.md](local-console.md)).
 
