@@ -21,6 +21,7 @@ import {
   type Language,
   languageOf,
   type NextStep,
+  type ProjectBrief,
   type SecretView,
   type StatusReport,
   type WorkspaceView,
@@ -882,6 +883,14 @@ async function workspaceViews(
   return views;
 }
 
+/** Of the projects the messenger is placed on, those the caller may see. */
+async function projectBriefs(ctx: PluginContext): Promise<ProjectBrief[]> {
+  const placed = ctx.plugin.projects;
+  return (await ctx.console.projects.list())
+    .filter((project) => placed === "all" || placed.includes(project.key))
+    .map((project) => ({ id: project.id, key: project.key, name: project.name }));
+}
+
 /** The first step of setting up that is not done, in the order they are done. */
 function nextStep(facts: {
   readonly address: boolean;
@@ -1014,6 +1023,7 @@ export const status = defineQuery({
       secrets,
       app: app === null ? null : appView(app),
       workspaces: await workspaceViews(ctx, [...connected, ...waiting]),
+      projects: connected.length > 1 ? await projectBriefs(ctx) : [],
       authorizeUrl,
       installUntil,
       distributionUrl: isMade(app) ? distributionUrlOf(app.data.appId) : null,

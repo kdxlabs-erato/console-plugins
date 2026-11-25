@@ -1386,8 +1386,6 @@ describe("notify and notices", () => {
     expect(view).toEqual({
       project,
       workspace: { teamId: TEAM, teamName: "Acme", default: true },
-      workspaces: [{ teamId: TEAM, teamName: "Acme" }],
-      keeper: false,
     });
     await expect(projectNotices.run(ctx.as(CONSOLE), { key: project })).rejects.toMatchObject({
       code: "no_person",

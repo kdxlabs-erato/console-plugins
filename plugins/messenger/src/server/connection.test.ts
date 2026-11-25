@@ -945,6 +945,32 @@ describe("the default workspace and the projects told in each", () => {
     expect(workspaceOf(ctx, OTHER.id)?.data.projects).toEqual([]);
   });
 
+  it("says the projects that may be told elsewhere, once there is another workspace to tell them in", async () => {
+    const { ctx } = setup({
+      placed: ["ACME", "BETA"],
+      board: {
+        projects: {
+          list: async () => [
+            { ...A, description: "never told" },
+            B,
+            project("0199a000-0000-7000-8000-00000000p003", "ELSEWHERE"),
+          ],
+        },
+      },
+    });
+    await connected(ctx);
+    expect(((await status.run(ctx, {})) as StatusReport).projects).toEqual([]);
+    await connected(ctx, "ko", OTHER);
+    await workspace.run(ctx, { team: OTHER.id, add: [B] });
+    const report = (await status.run(ctx, {})) as StatusReport;
+    // Of those the caller may see, the ones the messenger is placed on, by no more than their names.
+    expect(report.projects).toEqual([A, B]);
+    expect(report.workspaces.map((found) => [found.teamId, found.projects])).toEqual([
+      [TEAM, []],
+      [OTHER.id, [B.id]],
+    ]);
+  });
+
   it("refuses a workspace the app is not installed in, and whoever does not hold the role", async () => {
     const { ctx } = setup();
     await connected(ctx);

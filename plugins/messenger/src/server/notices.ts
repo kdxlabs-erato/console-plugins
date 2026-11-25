@@ -403,11 +403,6 @@ export const projectNotices = defineQuery({
               teamName: team.data.teamName,
               default: !team.data.projects.includes(args.key.id),
             },
-      workspaces: connected.map((connection) => ({
-        teamId: connection.data.teamId,
-        teamName: connection.data.teamName,
-      })),
-      keeper: ctx.caller.kind === "person" && ctx.caller.roles.includes(ROLE),
     };
   },
 });

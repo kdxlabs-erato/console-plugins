@@ -200,15 +200,6 @@
       "roles": ["member"]
     },
     {
-      "key": "slack",
-      "name": {
-        "en": "Slack",
-        "ko": "Slack 알림"
-      },
-      "level": "project",
-      "roles": ["member"]
-    },
-    {
       "key": "activity",
       "name": {
         "en": "Activity",

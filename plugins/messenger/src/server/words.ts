@@ -592,7 +592,7 @@ const KO: ServerWords = {
     installLink: (url) =>
       `워크스페이스에 앱을 설치할 수 있는 사람이 하루 안에 이 주소를 열어 설치하세요. 한 번만 쓸 수 있습니다: ${url}`,
     distribution: (url) =>
-      `앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 켜세요: ${url}`,
+      `앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 활성화하세요: ${url}`,
     removed: (name) =>
       `${name}에서 앱을 제거하고 그곳의 스레드를 닫았습니다. 다시 설치하면 채널 알림과 계정 연결이 돌아옵니다.`,
     workspaceSaved: (name, isDefault, projects) =>

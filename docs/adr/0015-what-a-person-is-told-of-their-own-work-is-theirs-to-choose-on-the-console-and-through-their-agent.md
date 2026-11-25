@@ -1,6 +1,6 @@
 # ADR-0015: What a person is told of their own work is theirs to choose, on the console and through their agent
 
-- Status: Accepted; points 1 and 2 superseded by [ADR-0017](0017-the-console-decides-who-is-told-and-the-messenger-sends-on-what-it-told-of-which-each-member-chooses-what-reaches-them.md)
+- Status: Accepted; points 1 and 2 superseded by [ADR-0017](0017-the-console-decides-who-is-told-and-the-messenger-sends-on-what-it-told-of-which-each-member-chooses-what-reaches-them.md); the project page amended by [ADR-0018](0018-the-messenger-has-no-page-on-a-project-and-the-workspace-each-is-told-in-is-said-on-its-connection-page.md)
 - Date: 2026-11-15
 
 ## Context

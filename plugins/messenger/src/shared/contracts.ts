@@ -81,6 +81,13 @@ export interface AppView {
 }
 
 /** A workspace the app is installed in, its bot token as the console says it. */
+/** A project as the pages name it. */
+export interface ProjectBrief {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+}
+
 export interface WorkspaceView {
   readonly teamId: string;
   readonly teamName: string | null;
@@ -141,6 +148,12 @@ export interface StatusReport {
   readonly app: AppView | null;
   /** The workspaces the app is installed in, the default first. */
   readonly workspaces: readonly WorkspaceView[];
+  /**
+   * Of the projects the messenger is placed on, those the caller may see, by which what each
+   * workspace is told of is named. Where one workspace is connected there is nothing to say of
+   * them, and none is listed.
+   */
+  readonly projects: readonly ProjectBrief[];
   /**
    * Slack's address that installs the app in a workspace, the newest link still good, and until
    * when; null where none is.
@@ -333,13 +346,10 @@ export interface NoticesView {
 
 /** How a project stands with Slack, for its page: the workspace it is told in. */
 export interface ProjectNoticesView {
-  readonly project: { readonly id: string; readonly key: string; readonly name: string } | null;
+  readonly project: ProjectBrief;
   readonly workspace: {
     readonly teamId: string;
     readonly teamName: string | null;
     readonly default: boolean;
   } | null;
-  readonly workspaces: readonly { readonly teamId: string; readonly teamName: string | null }[];
-  /** Whether the reader may say which workspace the project is told in: the messenger role. */
-  readonly keeper: boolean;
 }

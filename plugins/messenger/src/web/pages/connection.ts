@@ -1,7 +1,7 @@
 // The connection page: the steps that connect Slack, each saying whether it is done and what is
 // left (the console's address, the configuration token, the app, its installation in a workspace),
-// then the workspaces the app is installed in (ADR-0014), how the app stands, what HR is to the
-// messenger, and a test message. Every press runs a command, as an agent would; an installation
+// then the workspaces the app is installed in and, where there are several, the one each project is
+// told in (ADR-0014, ADR-0018), how the app stands, what HR is to the messenger, and a test message. Every press runs a command, as an agent would; an installation
 // opens Slack's own page from the press itself, and its link is shown to be handed over.
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import {
@@ -16,6 +16,7 @@ import {
   badge,
   button,
   callout,
+  chip,
   columns,
   DASH,
   dateTimeIn,
@@ -25,6 +26,7 @@ import {
   factsPlain,
   field,
   input,
+  lead,
   muted,
   page,
   pageHead,
@@ -36,6 +38,7 @@ import {
   runInPlace,
   select,
   sequenced,
+  settingsRow,
   statusLine,
   table,
   toolbar,
@@ -188,6 +191,75 @@ function workspaceRow(
     ),
     acts,
   ]);
+}
+
+/**
+ * The workspace each project is told in, where there are several: a row for each besides the
+ * default, the projects told there as chips that are taken out of it, and the way to add one.
+ */
+function toldPanel(
+  frame: PluginFrame,
+  words: Words,
+  status: StatusReport,
+  workspaces: readonly WorkspaceView[],
+): HTMLElement {
+  const w = words.connection;
+  // One line for every press of the panel, since each is drawn anew after it.
+  const said = statusLine("told");
+  const byId = new Map(status.projects.map((project) => [project.id, project]));
+  const named = new Set(workspaces.flatMap((workspace) => workspace.projects));
+  const free = status.projects.filter((project) => !named.has(project.id));
+  let unseen = 0;
+  const rows: HTMLElement[] = [];
+  for (const workspace of workspaces) {
+    // The default is told of what no other is named for; projects named for it before it was the
+    // default stay named, and are shown so that they can be taken out.
+    if (workspace.default && workspace.projects.length === 0) {
+      continue;
+    }
+    const chips = el("div", "sc-chips");
+    for (const id of workspace.projects) {
+      const project = byId.get(id);
+      if (project === undefined) {
+        unseen += 1;
+        continue;
+      }
+      chips.append(
+        chip(project.name, w.toldRemove(project.name), (press) => {
+          void runCommand(frame, press, said, words, "workspace", {
+            team: workspace.teamId,
+            remove: [project.key],
+          });
+        }),
+      );
+    }
+    const controls: HTMLElement[] = [chips.childElementCount > 0 ? chips : muted(w.toldNone)];
+    if (!workspace.default && free.length > 0) {
+      const project = select(free.map((one) => ({ value: one.key, label: one.name })));
+      project.setAttribute("aria-label", w.project);
+      const add = button(
+        w.toldAdd,
+        () => {
+          void runCommand(frame, add, said, words, "workspace", {
+            team: workspace.teamId,
+            add: [project.value],
+          });
+        },
+        "secondary",
+      );
+      controls.push(toolbar(project, add));
+    }
+    rows.push(settingsRow(nameOf(workspace), ...controls));
+  }
+  const home = workspaces.find((workspace) => workspace.default);
+  const settings = el("div", "sc-form sc-settings-form");
+  settings.append(...(home === undefined ? [] : [lead(w.toldHint(nameOf(home)))]), ...rows);
+  return panel(
+    w.told,
+    settings,
+    ...(unseen > 0 ? [muted(w.toldUnseen(String(unseen)))] : []),
+    said,
+  );
 }
 
 function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElement[] {
@@ -363,9 +435,11 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
             )
           : empty(w.noWorkspace),
         ...(waitingAny ? [muted(w.acceptHint)] : []),
-        ...(several ? [muted(w.defaultHint)] : []),
       ),
     );
+  }
+  if (several) {
+    main.push(toldPanel(frame, words, status, workspaces));
   }
 
   // What HR is to the messenger, first in the aside: it holds whatever the connection's stage.

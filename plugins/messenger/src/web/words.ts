@@ -75,7 +75,6 @@ export interface Words {
     readonly botToken: string;
     readonly tokenKept: string;
     readonly default: string;
-    readonly defaultHint: string;
     readonly makeDefault: string;
     readonly matchedCount: (count: string) => string;
     readonly notMatchedYet: string;
@@ -84,6 +83,13 @@ export interface Words {
     readonly waiting: string;
     readonly accept: string;
     readonly acceptHint: string;
+    readonly told: string;
+    readonly toldHint: (workspace: string) => string;
+    readonly toldNone: string;
+    readonly toldUnseen: (count: string) => string;
+    readonly project: string;
+    readonly toldAdd: string;
+    readonly toldRemove: (project: string) => string;
     readonly done: string;
     readonly todo: string;
     readonly blocked: string;
@@ -185,19 +191,6 @@ export interface Words {
     readonly defaultsHint: string;
     readonly reset: string;
   };
-  readonly project: {
-    readonly title: string;
-    readonly lead: string;
-    readonly notConnected: Note;
-    readonly here: string;
-    readonly workspace: string;
-    readonly byDefault: string;
-    readonly hint: string;
-    readonly choose: string;
-    readonly chooseHint: string;
-    readonly theDefault: string;
-    readonly save: string;
-  };
   readonly activity: {
     readonly title: string;
     readonly lead: string;
@@ -294,8 +287,6 @@ const EN: Words = {
     botToken: "Bot token",
     tokenKept: "Kept",
     default: "Default",
-    defaultHint:
-      "The default workspace is told of every project no other is named for, and of a person's own work where they have an account there.",
     makeDefault: "Make default",
     matchedCount: (count) => `${count} matched`,
     notMatchedYet: "Matched within the hour",
@@ -305,6 +296,14 @@ const EN: Words = {
     accept: "Accept",
     acceptHint:
       "A workspace that installed the app through a link waits until you accept it: nothing is matched or told there before. Accept a workspace you know; disconnect any other.",
+    told: "Where projects are told",
+    toldHint: (workspace) =>
+      `Projects are told in ${workspace}, the default. Add only those told in another workspace; whoever has no account there is told in the default.`,
+    toldNone: "No project is told here.",
+    toldUnseen: (count) => `${count} more are projects you may not see.`,
+    project: "Project",
+    toldAdd: "Add",
+    toldRemove: (project) => `Tell ${project} in the default again`,
     done: "Done",
     todo: "To do",
     blocked: "Opens once the steps above are done.",
@@ -472,22 +471,6 @@ const EN: Words = {
     defaultsHint: "Everything the console tells you, as it happens.",
     reset: "Reset",
   },
-  project: {
-    title: "Messenger",
-    lead: "Where this project is told in Slack.",
-    notConnected: {
-      title: "Slack is not connected yet",
-      body: "Once whoever keeps the messenger connects it, this page says where the project is told.",
-    },
-    here: "This project",
-    workspace: "Workspace",
-    byDefault: "Default",
-    hint: "What you are told of this project is the console's notification settings to say, and which of it reaches Slack is chosen on My Slack notifications.",
-    choose: "Told in",
-    chooseHint: "The workspace whose people work on this project.",
-    theDefault: "The default workspace",
-    save: "Save",
-  },
   activity: {
     title: "Activity",
     lead: "What the messenger did with each event it heard, kept for a month.",
@@ -612,7 +595,7 @@ const KO: Words = {
     installHint:
       "워크스페이스에 앱을 설치할 수 있는 사람이 새 탭에서 엽니다. 콘솔 계정이 없어도 됩니다. 설치하면 Slack이 그곳에서 앱을 엽니다.",
     distribution:
-      "앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 켜야 합니다.",
+      "앱을 만든 워크스페이스가 아닌 곳에 설치하려면, Slack 페이지의 Activate Public Distribution에서 배포를 한 번 활성화해야 합니다.",
     openDistribution: "Slack 배포 페이지 열기",
     workspaces: "워크스페이스",
     noWorkspace: "아직 앱을 설치한 워크스페이스가 없습니다.",
@@ -620,8 +603,6 @@ const KO: Words = {
     botToken: "봇 토큰",
     tokenKept: "보관됨",
     default: "기본",
-    defaultHint:
-      "기본 워크스페이스에는 다른 곳에 정하지 않은 모든 프로젝트를 알리고, 그곳에 계정이 있는 사람에게 본인 일을 알립니다.",
     makeDefault: "기본으로",
     matchedCount: (count) => `${count}명 연결`,
     notMatchedYet: "한 시간 안에 연결",
@@ -631,6 +612,14 @@ const KO: Words = {
     accept: "수락",
     acceptHint:
       "링크로 앱을 설치한 워크스페이스는 수락할 때까지 기다립니다. 그 전에는 계정을 연결하지도, 알리지도 않습니다. 아는 워크스페이스만 수락하고, 아니면 연결을 해제하세요.",
+    told: "프로젝트를 알리는 곳",
+    toldHint: (workspace) =>
+      `프로젝트는 기본 워크스페이스인 ${workspace}에 알립니다. 다른 워크스페이스에 알릴 것만 추가하세요. 그곳에 계정이 없는 사람에게는 기본 워크스페이스에서 알립니다.`,
+    toldNone: "여기에 알리는 프로젝트가 없습니다.",
+    toldUnseen: (count) => `볼 수 없는 프로젝트 ${count}개가 더 있습니다.`,
+    project: "프로젝트",
+    toldAdd: "추가",
+    toldRemove: (project) => `${project}: 기본 워크스페이스로 되돌리기`,
     done: "완료",
     todo: "할 일",
     blocked: "위 단계를 마치면 열립니다.",
@@ -656,15 +645,15 @@ const KO: Words = {
     hr: "HR",
     hrState: {
       on: "연결됨",
-      off: "꺼짐",
+      off: "비활성",
       no_capability: "허용 안 됨",
       outside: "다른 버전",
     },
     hrHint: {
       on: "Slack에서 단축키로 휴가를 신청하고 취소하며, 신청마다 HR의 알림을 따라 스레드가 이어집니다.",
-      off: "HR이 켜져 있지 않아 단축키가 앱에 없고 스레드도 만들지 않습니다.",
+      off: "HR이 활성화되어 있지 않아 단축키가 앱에 없고 스레드도 만들지 않습니다.",
       no_capability:
-        "메신저에 HR의 api가 켜져 있지 않습니다. 관리자가 플러그인 설정 페이지에서 plugins:hr을 켜야 합니다.",
+        "메신저에 HR의 api가 활성화되어 있지 않습니다. 관리자가 플러그인 설정 페이지에서 plugins:hr을 활성화해야 합니다.",
       outside: "메신저가 읽도록 만들어진 HR 버전이 아니라 HR을 건드리지 않습니다.",
     },
     hrVersion: (version, range) => `HR ${version}, 메신저가 읽는 범위 ${range}`,
@@ -796,22 +785,6 @@ const KO: Words = {
     defaultsHint: "콘솔이 알려 주는 것을 모두, 그때그때 받습니다.",
     reset: "되돌리기",
   },
-  project: {
-    title: "메신저",
-    lead: "이 프로젝트를 Slack의 어느 워크스페이스에 알리는지 봅니다.",
-    notConnected: {
-      title: "아직 Slack이 연결되지 않았습니다",
-      body: "메신저 담당이 Slack을 연결하면 이 프로젝트를 어디에 알리는지 여기에 보입니다.",
-    },
-    here: "이 프로젝트",
-    workspace: "워크스페이스",
-    byDefault: "기본",
-    hint: "이 프로젝트에서 무엇을 알림으로 받을지는 콘솔의 알림 설정에서, 그 가운데 Slack으로 받을 것은 내 Slack 알림에서 정합니다.",
-    choose: "알리는 곳",
-    chooseHint: "이 프로젝트를 하는 사람들이 쓰는 워크스페이스.",
-    theDefault: "기본 워크스페이스",
-    save: "저장",
-  },
   activity: {
     title: "전송 기록",
     lead: "메신저가 받은 알림마다 한 일을 한 달 동안 보관합니다.",
@@ -855,7 +828,7 @@ const KO: Words = {
       no_thread: () => "이 신청은 전에 알린 것이 없습니다.",
       not_leave: () => "메신저가 알리는 알림이 아닙니다.",
       not_connected: () => "Slack이 연결되지 않았습니다.",
-      no_capability: () => "메신저에 HR의 api가 켜져 있지 않습니다.",
+      no_capability: () => "메신저에 HR의 api가 활성화되어 있지 않습니다.",
       outside: (version) => `메신저가 읽지 않는 HR 버전입니다(${version}).`,
       no_grant: () => "메신저에 신청을 읽을 HR 역할이 없습니다.",
       hidden: () => "HR이 메신저에게 이 신청을 보여 주지 않습니다.",

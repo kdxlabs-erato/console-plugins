@@ -248,7 +248,7 @@ export function settingsForm(...children: HTMLElement[]): HTMLFormElement {
  */
 export function settingsRow(label: string, ...controls: HTMLElement[]): HTMLDivElement {
   const node = el("div", "sc-settings-row setting");
-  const control = el("div", "sc-settings-control");
+  const control = el("div", "sc-settings-control control");
   control.append(...controls);
   node.append(el("span", "sc-settings-label", label), control);
   return node;
@@ -257,6 +257,23 @@ export function settingsRow(label: string, ...controls: HTMLElement[]): HTMLDivE
 export function actions(...children: HTMLElement[]): HTMLDivElement {
   const node = el("div", "sc-form-actions");
   node.append(...children);
+  return node;
+}
+
+/** A thing named among others in a row, with the way to take it out, as the console's chips. */
+export function chip(
+  name: string,
+  remove: string,
+  onRemove: (press: HTMLButtonElement) => void,
+): HTMLSpanElement {
+  const node = el("span", "sc-chip");
+  node.title = name;
+  const press = el("button", "sc-chip-remove", "×");
+  press.type = "button";
+  press.setAttribute("aria-label", remove);
+  press.title = remove;
+  press.addEventListener("click", () => onRemove(press));
+  node.append(el("span", "sc-chip-label", name), press);
   return node;
 }
 

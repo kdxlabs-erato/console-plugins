@@ -439,6 +439,8 @@ export function setup(
     readonly url?: string | null;
     readonly capabilities?: readonly string[];
     readonly grants?: readonly { readonly plugin: string; readonly role: string }[];
+    /** The projects the messenger is placed on, by key; every one unless said. */
+    readonly placed?: readonly string[];
     readonly answer?: (decisionId: string, personId: string) => void;
     /** The language an administrator set for the workspace; none set unless said. */
     readonly workspaceLanguage?: "en" | "ko";
@@ -476,6 +478,7 @@ export function setup(
         "plugins:hr",
       ],
       grants: options.grants ?? [{ plugin: "hr", role: "hr" }],
+      ...(options.placed === undefined ? {} : { projects: options.placed }),
     },
     console: {
       workspace: async () => ({
@@ -500,9 +503,7 @@ export function setup(
         get: async (id) => people.find((person) => person.id === id) ?? null,
       },
       ...(options.board?.tasks === undefined ? {} : { tasks: options.board.tasks as never }),
-      ...(options.board?.projects === undefined
-        ? {}
-        : { projects: options.board.projects as never }),
+      projects: (options.board?.projects ?? { list: async () => [] }) as never,
       decisions: {
         ...(options.board?.decisions?.get === undefined
           ? {}
