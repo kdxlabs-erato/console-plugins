@@ -100,7 +100,7 @@ function addForm(
   });
   const channel = select([{ value: "", label: connected ? w.channelPick : w.connectFirst }], "");
   channel.disabled = true;
-  const said = statusLine();
+  const said = statusLine("add");
   // The channels are Slack's to list, of the workspace chosen: before Slack is connected there are
   // none to ask for.
   const listChannels = () => {

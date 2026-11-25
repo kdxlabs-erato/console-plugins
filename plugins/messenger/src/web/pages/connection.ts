@@ -33,6 +33,7 @@ import {
   pills,
   row,
   runCommand,
+  runInPlace,
   select,
   sequenced,
   statusLine,
@@ -453,7 +454,7 @@ function build(frame: PluginFrame, words: Words, status: StatusReport): HTMLElem
       const testStatus = statusLine();
       const send = button(w.test, () => {
         const value = channel.value.trim();
-        void runCommand(frame, send, testStatus, words, "test", {
+        void runInPlace(frame, send, testStatus, words, "test", {
           ...(several ? { workspace: where.value } : {}),
           ...(value.length > 0 ? { channel: value } : {}),
         });

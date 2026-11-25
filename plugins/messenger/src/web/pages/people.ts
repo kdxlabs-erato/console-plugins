@@ -58,7 +58,7 @@ export async function renderPeople(
     if (!fresh()) {
       return;
     }
-    const matchStatus = statusLine();
+    const matchStatus = statusLine("match");
     const matchNow = button(w.matchNow, () => {
       void runCommand(frame, matchNow, matchStatus, words, "match");
     });

@@ -481,9 +481,16 @@ export function errorText(error: unknown, words: Words): string {
   return error instanceof Error && error.message.length > 0 ? error.message : words.failed;
 }
 
-/** A line under a form that says how it went: empty until it has something to say. */
-export function statusLine(): HTMLParagraphElement {
-  return el("p", "status");
+/**
+ * A line under a form that says how it went: empty until it has something to say. One with a name
+ * keeps what it said over the drawing that follows a command (`runCommand`).
+ */
+export function statusLine(name?: string): HTMLParagraphElement {
+  const node = el("p", "status");
+  if (name !== undefined) {
+    node.dataset.line = name;
+  }
+  return node;
 }
 
 export function say(status: HTMLElement, text: string, kind: "ok" | "error"): void {
@@ -497,11 +504,15 @@ export function clear(status: HTMLElement): void {
   status.className = `${PREFIX}status`;
 }
 
+/** What draws the page in the frame again: the page's own, from when it watches. */
+let drawAgain: (() => Promise<void>) | undefined;
+
 /**
  * Runs a command for a button: the button held while it runs, the refusal said in the status
- * line, the answer's text said there where it went through; null where it was refused.
+ * line, the answer's text said there where it went through; null where it was refused. What the
+ * page shows stays as it is, so it is for a command that changes nothing there.
  */
-export async function runCommand(
+export async function runInPlace(
   frame: PluginFrame,
   trigger: HTMLButtonElement,
   status: HTMLElement,
@@ -523,6 +534,38 @@ export async function runCommand(
   }
 }
 
+/**
+ * Runs a command as `runInPlace` does and, where it went through, draws the page again: a frame
+ * hears of commands from the feed of the project its page is on, so that a page outside a project
+ * hears none, its own included. What was said stays on a line with a name, and the keyboard on
+ * the button of the form it pressed.
+ */
+export async function runCommand(
+  frame: PluginFrame,
+  trigger: HTMLButtonElement,
+  status: HTMLElement,
+  words: Words,
+  name: string,
+  args: Readonly<Record<string, unknown>> = {},
+): Promise<Awaited<ReturnType<PluginFrame["command"]>> | null> {
+  const result = await runInPlace(frame, trigger, status, words, name, args);
+  if (result === null) {
+    return null;
+  }
+  await drawAgain?.();
+  const line = status.dataset.line;
+  if (line !== undefined && !status.isConnected) {
+    const again = document.querySelector<HTMLElement>(`[data-line="${line}"]`);
+    if (again !== null) {
+      say(again, result.text, "ok");
+      if (trigger.type === "submit") {
+        again.closest("form")?.querySelector<HTMLElement>("button[type=submit]")?.focus();
+      }
+    }
+  }
+  return result;
+}
+
 /** A form that handles its own submit, never the browser's. */
 export function onSubmit(target: HTMLFormElement, handler: () => Promise<void>): void {
   target.addEventListener("submit", (event) => {
@@ -531,8 +574,12 @@ export function onSubmit(target: HTMLFormElement, handler: () => Promise<void>):
   });
 }
 
-/** Refreshes the page when something of the plugin changed; a burst of changes is one refresh. */
+/**
+ * Refreshes the page when something of the plugin changed, a burst of changes one refresh, and
+ * after a command of the page's own.
+ */
 export function watch(frame: PluginFrame, refresh: () => Promise<void>): void {
+  drawAgain = refresh;
   let timer: ReturnType<typeof setTimeout> | undefined;
   frame.onEvent(["records", "command", "plugin"], () => {
     clearTimeout(timer);

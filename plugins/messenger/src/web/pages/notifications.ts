@@ -74,7 +74,7 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
       atField.hidden = chosen !== "daily";
     },
   );
-  const said = statusLine();
+  const said = statusLine("save");
   const save = submitButton(w.save);
   // Each choice a row of the console's settings form, its name beside its control, so that a short
   // choice stands at a bounded width beside what it is rather than across the pane. What one is
@@ -120,16 +120,16 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
     ),
   );
   if (view.chosen) {
-    const status = statusLine();
+    // Said on the form's line, which keeps it over the drawing that follows, as a save is.
     const reset = button(
       w.reset,
       () => {
-        void runCommand(frame, reset, status, words, "notify", { reset: true });
+        void runCommand(frame, reset, said, words, "notify", { reset: true });
       },
       "secondary",
       true,
     );
-    aside.push(panel(w.defaults, muted(w.defaultsHint), toolbar(reset), status));
+    aside.push(panel(w.defaults, muted(w.defaultsHint), toolbar(reset)));
   }
   return [pageHead(w.title, w.lead), columns(main, aside)];
 }
