@@ -69,6 +69,6 @@ To start again with a new app, as from a workspace kept for trying the plugin to
 ## Rules
 
 - Never ask for a token in chat, never repeat one, never put one in a report: an administrator pastes it into the console, and the plugin never reads it.
-- A route carries what everyone in a channel may read: who is out and when, never a reason. The reason stays in the thread of the person and whoever decides.
+- A route carries what everyone in a channel may read: who is out and when, the kind of leave only where HR's own setting shows it to colleagues (the calendar's, which HR keeps), never a reason. The reason stays in the thread of the person and whoever decides.
 - People decide: the plugin answers a decision only for the person who pressed its button in Slack, as theirs, and only one on their plate. An agent answers a decision only as its person tells it, with `console answer`.
 - `test` is the one message an agent sends; everything else the messenger sends follows from what happened on the console.

@@ -176,8 +176,9 @@ export interface ServerWords {
     readonly someone: string;
   };
   readonly channel: {
-    readonly mine: (span: string, kind: string) => string;
-    readonly theirs: (name: string, span: string, kind: string) => string;
+    /** The kind is none where HR keeps it from colleagues. */
+    readonly mine: (span: string, kind: string | null) => string;
+    readonly theirs: (name: string, span: string, kind: string | null) => string;
     readonly cancelled: string;
   };
   readonly days: (count: string) => string;
@@ -232,6 +233,9 @@ export interface ServerWords {
     readonly more: (count: string) => string;
   };
 }
+
+/** What is said after a sentence in brackets, where there is something to say. */
+const inBrackets = (text: string | null) => (text === null ? "" : ` (${text})`);
 
 const EN: ServerWords = {
   refused: {
@@ -441,8 +445,8 @@ const EN: ServerWords = {
     someone: "someone",
   },
   channel: {
-    mine: (span, kind) => `On leave ${span} (${kind})`,
-    theirs: (name, span, kind) => `${name} is on leave ${span} (${kind})`,
+    mine: (span, kind) => `On leave ${span}${inBrackets(kind)}`,
+    theirs: (name, span, kind) => `${name} is on leave ${span}${inBrackets(kind)}`,
     cancelled: "cancelled",
   },
   days: (count) => (count === "1" ? "1 day" : `${count} days`),
@@ -744,8 +748,8 @@ const KO: ServerWords = {
     someone: "누군가",
   },
   channel: {
-    mine: (span, kind) => `휴가: ${span} (${kind})`,
-    theirs: (name, span, kind) => `${name} 님 휴가: ${span} (${kind})`,
+    mine: (span, kind) => `휴가: ${span}${inBrackets(kind)}`,
+    theirs: (name, span, kind) => `${name} 님 휴가: ${span}${inBrackets(kind)}`,
     cancelled: "취소됨",
   },
   days: (count) => `${count}일`,

@@ -378,7 +378,7 @@ const EN: Words = {
     kinds: { "hr:leave-approved": "Leave, once approved" },
     kindHints: {
       "hr:leave-approved":
-        "Who is out, when, and the kind of leave; never the reason. Struck through if it is cancelled.",
+        "Who is out and when, with the kind of leave where HR shows it to colleagues; never the reason. Struck through if it is cancelled.",
     },
     asNames: { person: "The person's", app: "The app's" },
     asHints: {
@@ -696,7 +696,7 @@ const KO: Words = {
     kinds: { "hr:leave-approved": "승인된 휴가" },
     kindHints: {
       "hr:leave-approved":
-        "누가, 언제, 어떤 휴가로 쉬는지. 사유는 넣지 않습니다. 취소되면 취소선을 긋습니다.",
+        "누가 언제 쉬는지 알립니다. 휴가 종류는 HR 설정에서 동료에게 보일 때만 넣고, 사유는 넣지 않습니다. 취소되면 취소선을 긋습니다.",
     },
     asNames: { person: "당사자 이름", app: "앱 이름" },
     asHints: {

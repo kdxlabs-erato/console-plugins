@@ -524,7 +524,10 @@ function nameOrSomeone(person: HrPerson | null, language: Language): string {
   return person === null ? serverWords(language).thread.someone : clean(nameOf(person), 200);
 }
 
-/** The line a channel reads of an approved leave, in the route's language and under its name. */
+/**
+ * The line a channel reads of an approved leave, in the route's language and under its name. A
+ * channel is colleagues, so the kind is said only where HR shows it to them (ADR-0020).
+ */
 function channelLine(
   telling: Telling,
   data: Pick<PostData, "as" | "language">,
@@ -532,11 +535,11 @@ function channelLine(
 ): { readonly text: string; readonly blocks: Block[] } {
   const words = serverWords(data.language);
   const span = spanText(telling, data.language);
-  const kind = kindNameOf(telling, data.language);
+  const kind = telling.view.typeShown === true ? safe(kindNameOf(telling, data.language)) : null;
   const said =
     data.as === "person"
-      ? words.channel.mine(safe(span), safe(kind))
-      : words.channel.theirs(safe(clean(nameOf(telling.view.person), 200)), safe(span), safe(kind));
+      ? words.channel.mine(safe(span), kind)
+      : words.channel.theirs(safe(clean(nameOf(telling.view.person), 200)), safe(span), kind);
   const notes: string[] = [];
   if (telling.view.recordedBy !== null) {
     notes.push(words.thread.recordedBy(safe(clean(nameOf(telling.view.recordedBy), 200))));

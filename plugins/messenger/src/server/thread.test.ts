@@ -41,6 +41,7 @@ function view(overrides: {
   readonly decidedBy?: { id: string; login: string; name: string | null } | null;
   readonly note?: string | null;
   readonly recordedBy?: { id: string; login: string; name: string | null } | null;
+  readonly typeShown?: boolean;
 }) {
   return {
     id: REQUEST,
@@ -73,6 +74,7 @@ function view(overrides: {
     decisionPath: `/decisions/${FIRST}`,
     cancelDecisionPath: null,
     cancellable: true,
+    ...(overrides.typeShown === undefined ? {} : { typeShown: overrides.typeShown }),
   };
 }
 
@@ -87,7 +89,7 @@ function event(kind: string, requestId = REQUEST): PluginHookEvent {
     at: NOW.toISOString(),
     plugin: "hr",
     project: null,
-    data: { requestId, personId: MINSU.id },
+    data: { requestId },
   };
 }
 
@@ -375,7 +377,6 @@ describe("the end of a request", () => {
     const channel = posts.at(-1);
     expect(channel?.params).toMatchObject({ channel: "C0GENERAL", username: "Kim Minsu" });
     expect(blocksOf(channel)).toContain("On leave");
-    expect(blocksOf(channel)).toContain("Annual leave");
     expect(blocksOf(channel)).not.toContain("Family trip");
     expect(ctx.all("threads")[0]?.data.posts).toHaveLength(1);
   });
@@ -433,6 +434,50 @@ describe("the end of a request", () => {
     expect(updates.some((blocks) => blocks.includes("~*휴가 신청*~"))).toBe(true);
     expect(updates.some((blocks) => blocks.includes("~On leave"))).toBe(true);
   });
+
+  it.each([
+    [true, "HR shows it to colleagues", true],
+    [false, "HR keeps it from colleagues", false],
+    [undefined, "HR does not say, being older than 0.6", false],
+  ])(
+    "says the kind in a channel by HR's setting alone: %s, where %s",
+    async (shown, _why, said) => {
+      const { hook, slack, views } = await requested();
+      const typeShown = shown === undefined ? {} : { typeShown: shown };
+      views[REQUEST] = view({
+        state: "approved",
+        decidedBy: brief(JIHYE),
+        asked: [],
+        ...typeShown,
+      });
+      await onLeaveEvent(hook, event("leave-approved"));
+      const channel = slack.of("chat.postMessage").at(-1);
+      expect(channel?.params.channel).toBe("C0GENERAL");
+      for (const words of [blocksOf(channel), channel?.params.text ?? ""]) {
+        expect(words).toContain("On leave");
+        expect(words.includes("Annual leave")).toBe(said);
+        expect(words).not.toContain("annual");
+        expect(words).not.toContain("()");
+      }
+      // The person and whoever decides read it in their conversation all the same.
+      expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("연차");
+      // Struck through, it says no more than it did.
+      views[REQUEST] = view({
+        state: "cancelled",
+        decidedBy: brief(JIHYE),
+        asked: [],
+        ...typeShown,
+      });
+      await onLeaveEvent(hook, event("leave-cancelled"));
+      const struck = slack
+        .of("chat.update")
+        .filter((call) => call.params.channel === "C0GENERAL")
+        .map(blocksOf);
+      expect(struck).toHaveLength(1);
+      expect(struck[0]).toContain("~On leave");
+      expect(struck[0]?.includes("Annual leave")).toBe(said);
+    },
+  );
 
   it("opens a conversation for the cancellation of leave approved as it was written", async () => {
     const written = { decisionId: null, line: [] } as const;
