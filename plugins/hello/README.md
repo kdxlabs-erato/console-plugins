@@ -17,6 +17,16 @@ The table a plugin is read against: a row per thing the feature does, who starts
 
 Records: `greetings` (`to`, `text`, `by`; indexed by `to` and `by`; searched by `text`; owned by `by`; read by `greeter`). Roles: `greeter`, everyone's. Capabilities: none. Board: none. Settings: `greeting`, the word a greeting starts with. Menu: `operations`.
 
+### Who reads what
+
+Every door the plugin's data leaves by, beside the query above ([conventions](../../docs/guide/conventions.md#who-reads-what)). `src/server/readers.test.ts` holds the records and the words to the code. An administrator reads every record, as the console has it.
+
+| Door | Open to | What goes through it, and why |
+|---|---|---|
+| Records of `greetings` | `greeter` | a greeting, which everyone holding the role reads on the page |
+| Words given to `greet` | kept: `text` | a greeting, which everyone may read; with no board project, an administrator and whoever greeted read the command's event |
+| The event `greeted` | whoever holds any role, for ninety days | the id of the greeting |
+
 ## Where things are
 
 | Path | What |
@@ -46,4 +56,4 @@ Nothing to consent to: the plugin asks no capability and needs no board project.
 
 ## What differs from `console-plugin init`
 
-The adaptation every plugin here goes through after `init`, listed in [docs/guide/adding-a-plugin.md](../../docs/guide/adding-a-plugin.md). `init` itself writes the package's name, its repository fields and both languages when told (`--package`, `--repository` with `--directory`, `--languages en,ko`), the Korean as English words to translate; what is done here by hand: the Korean translated, `private: true` and the version `0.0.0` while it is unpublished, the shared tool versions from the workspace's catalog and the `prepack` that ships the license; `tsconfig.json` extending the repository's base; the web bundle taking its words from `src/web/words.ts` by the person's language; and this README carrying the design. The code of the server module is the template's, unchanged.
+The adaptation every plugin here goes through after `init`, listed in [docs/guide/adding-a-plugin.md](../../docs/guide/adding-a-plugin.md). `init` itself writes the package's name, its repository fields and both languages when told (`--package`, `--repository` with `--directory`, `--languages en,ko`), the Korean as English words to translate; what is done here by hand: the Korean translated, `private: true` and the version `0.0.0` while it is unpublished, the shared tool versions from the workspace's catalog and the `prepack` that ships the license; `tsconfig.json` extending the repository's base; the web bundle taking its words from `src/web/words.ts` by the person's language; and this README carrying the design, with who reads what and the test that holds it. The code of the server module is the template's, but for the event `greeted`, which carries the greeting's id alone.

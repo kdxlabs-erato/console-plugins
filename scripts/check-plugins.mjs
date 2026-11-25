@@ -16,7 +16,9 @@
 //   6. every link a Markdown file of the repository makes to a file of the repository resolves;
 //   7. every plugin is listed in the root README's table and in the roadmap;
 //   8. no Korean sentence of a plugin's sources writes a particle in both forms, "을(를)": the
-//      console's asObject, asSubject and asWay write the one its word takes.
+//      console's asObject, asSubject and asWay write the one its word takes;
+//   9. every README says who reads what, in the section its readers.test.ts holds to the code, and
+//      that test is the one plugins/hello has (docs/adr/0019).
 // Dependency-free but for the console's own manifest parser, which the root installs. Part of
 // `pnpm check`. A changed meaning is not caught here: a change to a plugin re-reads its README
 // and its skills by hand (AGENTS.md, documentation protocol).
@@ -31,6 +33,8 @@ const LANGUAGES = ["en", "ko"];
 const SCOPE = "@skillcdn/console-plugin-";
 const SHIPPED = ["dist", "skills", "SKILLCDN.md", "console-plugin.json"];
 const SCRIPTS = ["build", "typecheck", "test", "check", "clean", "prepack", "postpack"];
+/** The test that holds who reads what to the code, the same in every plugin. */
+const READERS = "src/server/readers.test.ts";
 const REQUIRED_FILES = [
   "console-plugin.json",
   "package.json",
@@ -40,6 +44,7 @@ const REQUIRED_FILES = [
   "tsconfig.json",
   "src/server/index.ts",
   "src/server/index.test.ts",
+  READERS,
   "src/check.test.ts",
 ];
 
@@ -435,6 +440,20 @@ for (const key of plugins) {
           }
         });
     }
+  }
+
+  // 9. Who reads what.
+  if (exists(`${dir}/README.md`) && !/^### Who reads what$/m.test(read(`${dir}/README.md`))) {
+    fail(
+      `${dir}/README.md`,
+      "has no section Who reads what; every door the plugin's data leaves by is a row of it",
+    );
+  }
+  if (
+    exists(`${dir}/${READERS}`) &&
+    read(`${dir}/${READERS}`) !== read(`plugins/hello/${READERS}`)
+  ) {
+    fail(`${dir}/${READERS}`, `is not plugins/hello/${READERS}; it is copied and left as it is`);
   }
 
   // 7. The catalogs.

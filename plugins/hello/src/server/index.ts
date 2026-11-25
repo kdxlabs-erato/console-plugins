@@ -39,7 +39,8 @@ export const greet = defineCommand({
     const text = args.text ?? `${word}, ${args.to}!`;
     const by = ctx.caller.kind === "person" ? ctx.caller.person.login : "console";
     const record = await ctx.records(greetings).create({ to: args.to, text, by });
-    await ctx.events.emit("greeted", { id: record.id, to: args.to });
+    // The id alone: the console answers an event to whoever holds any role of the plugin.
+    await ctx.events.emit("greeted", { id: record.id });
     return { text: `${text} (kept as ${record.id})`, data: record };
   },
 });

@@ -16,9 +16,7 @@ describe("greet", () => {
       text: "Hi, world!",
       by: "tester",
     });
-    expect(ctx.emitted).toEqual([
-      { kind: "greeted", data: { id: expect.any(String), to: "world" } },
-    ]);
+    expect(ctx.emitted).toEqual([{ kind: "greeted", data: { id: expect.any(String) } }]);
   });
 
   it("refuses what does not fit the schema", async () => {
