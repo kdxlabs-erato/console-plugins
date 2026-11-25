@@ -55,7 +55,7 @@ The table a plugin is read against: a row per thing the feature does, who starts
 |---|---|---|---|
 | `people` | `personId`, `login`, `name`, `leave`, `hiredOn`, `leftOn`, `policy`, `workDays`, `title`, `employment`, `note` | personId, leave, policy, leftOn, hiredOn; searched by login, name, title | owned by `personId`; read by `hr` alone, since `note` is HR's: a person reads what is theirs through the queries |
 | `policies` | `key`, `name` (one text, or null for the preset's), `description`, `preset`, `basis`, `startMonth`, `startDay`, `earning`, `firstPeriod`, `firstYearMonthly`, `monthlyUntil`, `monthlyMax`, `tiers`, `tenureAt`, `accrual`, `cap`, `carryOver`, `carryOverDays`, `carryOverMonths`, `advanceDays`, `countDays`, `rounding`, `reminderDays`, `payoutUnused`, `isDefault`, `enabled` | key, isDefault, enabled | read by `hr` |
-| `types` | `key`, `name` (by language), `paid`, `balance` (`annual`, `own`, `none`), `allowance`, `reason`, `unit`, `notice`, `late`, `autoApprove`, `cancel` (`deadline`, a notice's shape; `within`, `now`, `upTo`, `decision` or `hr`, with `days` for `upTo`; `after`, `decision` or `hr`), `color`, `order`, `enabled` | key, enabled, order | read by `member` |
+| `types` | `key`, `name` (by language), `paid`, `balance` (`annual`, `own`, `none`), `allowance`, `reason`, `unit`, `notice`, `late`, `autoApprove`, `cancel` (`deadline`, a notice's shape; `within`, `now`, `upTo`, `decision` or `hr`, with `days` for `upTo`; `after`, `decision` or `hr`), `color`, `order`, `enabled` | key, enabled, order | read by `hr`, since a kind turned off is HR's: everyone reads the kinds offered through the query `types` |
 | `config` | `line`, `rules` (each with its kinds, days, lateness and the keys of its teams), `backdatingDays`, `balanceVisibility`, `calendarVisibility`, `calendarShowsType`, `workDays`, `holidayCalendar` | none; one record | read by `hr` |
 | `requests` | `personId`, `type`, `from`, `to`, `part`, `days`, `reason`, `state`, `late`, `rule`, `steps` (each who it asks, its mode and who approved), `step`, `decisionId`, `cancelDecisionId`, `asked` (whom the decision it waits for, or waited for last, was addressed to, where the console sent it on up), `decidedBy`, `decidedAt`, `note`, `requestedBy`, `requestedAt`, `requestedVia` (the plugin it came through, for its person), `cancelledAt`, `period` | personId, state, from, to, type, decisionId, cancelDecisionId, period; searched by reason | owned by `personId`; read by `hr`, own by `member` |
 | `ledger` | `personId`, `type`, `kind` (`grant`, `accrual`, `carry`, `adjust`, `use`, `reverse`, `expire`, `payout`), `days`, `on`, `period`, `expiresOn`, `ref`, `requestId`, `bucket` (the credit an expiry or a payout closes, or the line a `reverse` undoes), `note`, `by` | personId, type, kind, period, ref, requestId, on | owned by `personId`; read by `hr`, own by `member`; no history, since a line is never edited |
@@ -94,9 +94,39 @@ An administrator holds every role. Who manages whom is the console's, on its Peo
 | `jobs` | runs on a schedule | the daily job |
 | `files` | files on its records, within the deployment's bound | the pictures of the announcements |
 
+### Who reads what
+
+Every door the plugin's data leaves by, beside the pages, the commands and the queries above, whose rows say who reads what of them ([conventions](../../docs/guide/conventions.md#who-reads-what)). `src/server/readers.test.ts` holds the records and the words to the code, and `src/server/contract.test.ts` the events. An administrator reads every record, as the console has it.
+
+| Door | Open to | What goes through it, and why |
+|---|---|---|
+| Records of `people` | `hr` | a person's whole record, HR's note in it; a person and their managers read what they may of it through the queries, which leave the note out |
+| Records of `policies` | `hr` | how HR set leave up; a person reads their own policy in a sentence, through `balance` |
+| Records of `types` | `hr` | the kinds, those turned off too; everyone reads the kinds offered through `types` |
+| Records of `config` | `hr` | who approves and who sees what |
+| Records of `requests` | `hr`; one's own: `member` | a request whole, its reason in it; a manager and whoever is asked read what they may through `requests` and `request-view` alone |
+| Records of `ledger` | `hr`; one's own: `member` | the lines of a balance, with HR's note; whoever may see the balance reads them through `ledger` |
+| Records of `holidays` | `member` | nothing of anyone |
+| Records of `announcements` | one's own: `hr` | a draft is its writer's alone, and what is published is read through the queries, by those it is for |
+| Records of `announcement-pictures` | `member`, `hr` | nothing in the record; a picture is read by its id, which only a text names |
+| Records of `marks` | `hr` | what the daily job did |
+| Records of `chores` | `hr` | a task for HR not written yet |
+| Words given to `request` | hidden: `reason` | why, which the record, the decision and those it is for have; the event of a command keeps its arguments in the board project's feed, for whoever sees the project, and for good |
+| Words given to `cancel` | hidden: `reason` | why |
+| Words given to `adjust` | hidden: `note` | HR's word, which the ledger has |
+| Words given to `reverse` | hidden: `note` | HR's word, which the ledger has |
+| Words given to `enroll` | hidden: `note` | HR's word on a person, which HR alone reads |
+| Words given to `announcement` | hidden: `title`, `body` | a draft, which is its writer's alone |
+| Words given to `announcement-picture` | hidden: `alt` | a draft's |
+| Words given to `policy` | kept: `description`, `tiers` | how HR set leave up, kept in the feed as its history |
+| Words given to `configure` | kept: `line`, `rules` | how HR set leave up, kept in the feed as its history |
+| The events | whoever holds any role, as everyone does, for ninety days | the id of one record or nothing, as "The contract" has it, and never a person; nothing of a draft |
+| The decisions and the tasks | whom a decision is for, those above them, and the members of the board project | the person, the days and the reason; HR's tasks name people and days |
+| The calls of the `api` | a plugin with `plugins:hr`, under the roles the console gives its call | what the command or the query of the same name answers, "The contract" |
+
 ### Board, settings, menu
 
-The board project is required: the decisions and the tasks go there; the defaults make a project `hr` (HR / 인사), private as the console makes one, its mark the pack's `people` on green, which the enabling form shows and an administrator may change (a project chosen keeps its own). A decision reaches whoever it is addressed to and the managers above them wherever they are, and whoever may use the plugin is a requester in the project (the console's ADR-0080): a request raises its first decision there in the requester's own call, whether they may see the project or not, and they read that decision at its own address and nothing else of the project. So nobody is added to the project to request leave or to approve it. A later step's decision is raised by the plugin's hook, and the requester follows it on the page `leave`, which offers a decision's address only where it opens for them. A task is the plugin's own: a call for a person writes none, so the task to mend a line that a request found broken waits as a chore for the daily job. Whoever is a member of the project reads every decision there, reasons included, and may answer them, each answer recorded under its name, so its members are those who keep leave, if anyone. The manifest asks an administrator nothing else: what an organization decides about leave is HR's, not an administrator's, and the console's settings page is an administrator's alone, so it is the record `config`, on the Setup page and with `configure`: nothing secret and no capability is in it, every write is a command of the role `hr`, a `plugin.command` event on the board and a version of the record. Menu group `people`; pages `overview`, `announcements`, `leave` and `calendar` (members, wide), `approvals` and `people` (managers and HR, wide) and `setup` (HR, wide); widgets `announcements` (small, medium, large, wide), `balance` (small, medium, large), `today` (small, medium, large, wide) and `approvals` (small, medium, large; managers and HR), which a person arranges on the front page.
+The board project is required: the decisions and the tasks go there; the defaults make a project `hr` (HR / 인사), private as the console makes one, its mark the pack's `people` on green, which the enabling form shows and an administrator may change (a project chosen keeps its own). A decision reaches whoever it is addressed to and the managers above them wherever they are, and whoever may use the plugin is a requester in the project (the console's ADR-0080): a request raises its first decision there in the requester's own call, whether they may see the project or not, and they read that decision at its own address and nothing else of the project. So nobody is added to the project to request leave or to approve it. A later step's decision is raised by the plugin's hook, and the requester follows it on the page `leave`, which offers a decision's address only where it opens for them. A task is the plugin's own: a call for a person writes none, so the task to mend a line that a request found broken waits as a chore for the daily job. Whoever is a member of the project reads every decision there, reasons included, and may answer them, each answer recorded under its name, and reads the event of every command, with its arguments but the words hidden in it, so its members are those who keep leave, if anyone. The manifest asks an administrator nothing else: what an organization decides about leave is HR's, not an administrator's, and the console's settings page is an administrator's alone, so it is the record `config`, on the Setup page and with `configure`: nothing secret and no capability is in it, every write is a command of the role `hr`, a `plugin.command` event on the board and a version of the record. Menu group `people`; pages `overview`, `announcements`, `leave` and `calendar` (members, wide), `approvals` and `people` (managers and HR, wide) and `setup` (HR, wide); widgets `announcements` (small, medium, large, wide), `balance` (small, medium, large), `today` (small, medium, large, wide) and `approvals` (small, medium, large; managers and HR), which a person arranges on the front page.
 
 ## The contract
 
@@ -104,27 +134,27 @@ What other plugins hear of `hr` and may call, and what they may count on ([ADR-0
 
 ### Events
 
-Each reaches a hook with `events:plugins` as `plugin:hr:<kind>`, its data ids alone: a reader asks for the rest through the calls below, under its own roles, so that a reason reaches only those it is for.
+Each reaches a hook with `events:plugins` as `plugin:hr:<kind>`, and the console answers it, for ninety days, to whoever holds any role of the plugin, as everyone does. So its data is the id of one record, which says nothing to whoever may not read that record, or nothing at all, and never a person ([ADR-0019](../../docs/adr/0019-what-a-plugin-holds-is-read-door-by-door-by-whoever-its-work-needs-it.md)): a reader asks for the rest through the calls below, under its own roles, so that whose it is and why reach only those they are for.
 
 | Kind | Data | When |
 |---|---|---|
-| `leave-requested` | `requestId`, `personId` | a request waits for the first decision of its line |
-| `leave-recorded` | `requestId`, `personId`, `by` | someone recorded leave for another person |
-| `leave-advanced` | `requestId`, `personId` | a step was approved, and the next step's decision raised |
-| `leave-approved` | `requestId`, `personId` | the end of its line approved it, or it was approved as it was written |
-| `leave-rejected` | `requestId`, `personId` | a step rejected it |
-| `leave-returned` | `requestId`, `personId` | sent back: an answer in someone's own words, or the person's answer to their own request |
-| `leave-cancelling` | `requestId`, `personId` | the cancellation of approved leave waits for a decision |
-| `leave-cancelled` | `requestId`, `personId` | cancelled, at once or by the cancellation's decision |
-| `leave-kept` | `requestId`, `personId` | the cancellation was rejected, and the leave stands |
-| `balance-adjusted` | `personId`, `entryId` | HR wrote a line of the ledger by hand, or reversed one |
-| `person-changed` | `personId` | a person's record was written: enrolled, changed, offboarded, recounted |
-| `policy-changed` | `key` | a policy was written |
-| `type-changed` | `key` | a kind of leave was written |
+| `leave-requested` | `requestId` | a request waits for the first decision of its line |
+| `leave-recorded` | `requestId` | someone recorded leave for another person |
+| `leave-advanced` | `requestId` | a step was approved, and the next step's decision raised |
+| `leave-approved` | `requestId` | the end of its line approved it, or it was approved as it was written |
+| `leave-rejected` | `requestId` | a step rejected it |
+| `leave-returned` | `requestId` | sent back: an answer in someone's own words, or the person's answer to their own request |
+| `leave-cancelling` | `requestId` | the cancellation of approved leave waits for a decision |
+| `leave-cancelled` | `requestId` | cancelled, at once or by the cancellation's decision |
+| `leave-kept` | `requestId` | the cancellation was rejected, and the leave stands |
+| `balance-adjusted` | `entryId` | HR wrote a line of the ledger by hand, or reversed one |
+| `person-changed` | none | a person's record was written: enrolled, changed, offboarded, recounted |
+| `policy-changed` | none | a policy was written |
+| `type-changed` | none | a kind of leave was written |
 | `holidays-changed` | `year` | the holidays of a year changed |
-| `config-changed` | `fields` | HR's configuration changed, in the fields named |
+| `config-changed` | none | HR's configuration changed |
 | `announcement-published` | `id` | an announcement was published |
-| `announcement-changed` | `id` | an announcement changed: what is published, or a draft, which `announcement-view` answers to its writer alone |
+| `announcement-changed` | `id` | what was published changed, was taken down or was removed; a draft's changes are told to nobody |
 
 A request's events come in this order: `leave-requested`, `leave-advanced` for each step after the first, then one of `leave-approved`, `leave-rejected` and `leave-returned`. A request approved as it is written is `leave-approved` alone, with no `leave-requested` before it. Leave recorded for someone is `leave-recorded`, then `leave-approved` or `leave-requested`. Approved leave cancelled is `leave-cancelled`, or `leave-cancelling` and then `leave-cancelled` or `leave-kept`; a request still waiting is cancelled with `leave-cancelled` alone. Delivery is at least once, so a reader keeps the ids it acted on.
 
@@ -186,7 +216,7 @@ Most of what an organization wants is a policy, a preset and the fields it overr
 What the administrator does, which the hand-over task quotes:
 
 1. Consent to the capabilities above, each read as its sentence.
-2. The board project: make `hr` from the defaults, or choose one. Add nobody to it for leave: a request raises its decision there whether the requester may see the project or not, and a decision reaches whoever it is for and the managers above them wherever they are (the console's ADR-0068 and ADR-0080). Whoever is a member reads and may answer every decision there, reasons included. A decision the console refuses, to someone who left it, goes on up the person's managers, to the administrators and to HR, with a task to mend the line, written by the hook or by the next daily job, and to the administrator who enabled the plugin where there is nobody else.
+2. The board project: make `hr` from the defaults, or choose one. Add nobody to it for leave: a request raises its decision there whether the requester may see the project or not, and a decision reaches whoever it is for and the managers above them wherever they are (the console's ADR-0068 and ADR-0080). Whoever is a member reads and may answer every decision there, reasons included, and reads what every command was given, the reasons, HR's notes and an announcement's text apart: make the project private, or choose one that HR alone sees. A decision the console refuses, to someone who left it, goes on up the person's managers, to the administrators and to HR, with a task to mend the line, written by the hook or by the next daily job, and to the administrator who enabled the plugin where there is nobody else.
 3. The roles: `hr` to the people who administer leave (`console plugin hr grant hr --person <login>`, or `--team <key>`); `member` is everyone's; `manager` is nobody's to grant: the console gives it to whoever someone reports to, as each person's manager is set on its People page.
 4. HR opens the Setup page: three questions (the country, who approves, who sees what) set leave up, and every answer can be changed afterwards. `console plugin hr setup kr` and `configure` do the same.
 5. HR enrolls the people on the People page, or as the skill `hr-administration` says: `console plugin hr enroll <login> --leave on --hired-on <day>` for each person whose leave is managed here. Only enrolled people with leave on are counted; the rest see the pages and no balance.

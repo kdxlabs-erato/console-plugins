@@ -527,7 +527,6 @@ export interface CalendarEntry {
   readonly type: string | null;
   readonly part: Part;
   readonly state: "requested" | "approved";
-  readonly requestId: string;
 }
 
 export interface CalendarReport {

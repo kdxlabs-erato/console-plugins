@@ -84,7 +84,7 @@ When the console deactivates a person, the plugin turns their leave off from tha
 ## Rules
 
 - The plugin decides no request. Whoever the line asks answers on the board, or tells you what to answer and you write it with `console answer`. HR records what was decided elsewhere with `request --approved`, and says where it was decided in the reason.
-- Every adjustment has a note that says why; a figure without a reason is not written, and a line is undone with `reverse`, never with another adjustment that cancels it.
+- Every adjustment has a note that says why; a figure without a reason is not written, and a line is undone with `reverse`, never with another adjustment that cancels it. The person reads that note in their ledger, as does whoever may see their balance: what HR alone is to know goes in `enroll --note`, which nobody else reads.
 - A rule of the whole organization that differs from the preset is the policy's or the kind's to say: change them, and `recount` whoever was enrolled before. An adjustment is for one person's case alone, and the law is HR's to apply there: when a policy's figure and the law differ for someone (a termination settled on the hire-date basis, an attendance rate under 80%, a new rule), HR corrects that balance by adjustment, and the plugin counts as told.
 - A person is enrolled once, and changed with the same command.
 - Say what was changed in the run's report, with the logins and the figures.

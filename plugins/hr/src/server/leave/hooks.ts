@@ -155,7 +155,7 @@ async function goOn(
       { steps, step: next.step, decisionId: raised.id, asked: raised.asked },
       { baseVersion: found.version },
     );
-  await emit(ctx, "leave-advanced", { requestId: found.id, personId: found.data.personId });
+  await emit(ctx, "leave-advanced", { requestId: found.id });
 }
 
 export async function onDecisionAnswered(
@@ -208,10 +208,7 @@ export async function onDecisionAnswered(
         },
         { baseVersion: found.version },
       );
-      await emit(ctx, "leave-returned", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-returned", { requestId: found.id });
       return;
     }
     if (answer.verdict === "approve") {
@@ -229,10 +226,7 @@ export async function onDecisionAnswered(
           { baseVersion: found.version },
         );
       await writeUse(ctx, updated, by);
-      await emit(ctx, "leave-approved", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-approved", { requestId: found.id });
     } else if (answer.verdict === "reject") {
       await ctx
         .records(requests)
@@ -241,10 +235,7 @@ export async function onDecisionAnswered(
           { state: "rejected", decidedBy: answer.by, decidedAt: answer.at, note },
           { baseVersion: found.version },
         );
-      await emit(ctx, "leave-rejected", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-rejected", { requestId: found.id });
     } else {
       await ctx.records(requests).update(
         found.id,
@@ -256,10 +247,7 @@ export async function onDecisionAnswered(
         },
         { baseVersion: found.version },
       );
-      await emit(ctx, "leave-returned", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-returned", { requestId: found.id });
     }
     return;
   }
@@ -276,7 +264,7 @@ export async function onDecisionAnswered(
           { state: "approved", note: serverWords(language).ownCancelAnswer },
           { baseVersion: found.version },
         );
-      await emit(ctx, "leave-kept", { requestId: found.id, personId: found.data.personId });
+      await emit(ctx, "leave-kept", { requestId: found.id });
       return;
     }
     if (answer.verdict === "approve") {
@@ -288,10 +276,7 @@ export async function onDecisionAnswered(
           { state: "cancelled", cancelledAt: stamp(clock), note },
           { baseVersion: found.version },
         );
-      await emit(ctx, "leave-cancelled", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-cancelled", { requestId: found.id });
     } else {
       await ctx
         .records(requests)
@@ -300,7 +285,7 @@ export async function onDecisionAnswered(
           { state: "approved", note: note ?? answer.words },
           { baseVersion: found.version },
         );
-      await emit(ctx, "leave-kept", { requestId: found.id, personId: found.data.personId });
+      await emit(ctx, "leave-kept", { requestId: found.id });
     }
   }
 }

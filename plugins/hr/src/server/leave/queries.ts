@@ -601,7 +601,6 @@ async function calendarEntries(
         type: showsType ? item.data.type : null,
         part: item.data.part,
         state: item.data.state === "requested" ? "requested" : "approved",
-        requestId: item.id,
       });
     }
   }

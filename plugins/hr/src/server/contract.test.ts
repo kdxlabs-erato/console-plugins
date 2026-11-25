@@ -71,6 +71,13 @@ describe("the contract", () => {
     );
   });
 
+  it("tells whoever holds any role no more than the id of a record", () => {
+    // The console answers the events a plugin emitted to every holder of a role, and `member` is
+    // everyone's (ADR-0019): no person, no name, nothing HR chose.
+    const fields = new Set(Object.values(EVENTS).flat());
+    expect([...fields].sort()).toEqual(["entryId", "id", "requestId", "year"]);
+  });
+
   it("emits nothing the contract does not name", () => {
     const sources = [
       "leave/commands.ts",

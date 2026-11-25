@@ -228,13 +228,23 @@ export const announcement = defineCommand({
       positional: true,
       optional: true,
     }),
-    title: arg.text({ about: "its title", optional: true, max: ANNOUNCEMENT_TITLE_AT_MOST }),
-    body: arg.markdown({
-      about:
-        "its text: ## headings, lists, > quotes, **bold**, *italic*, ++underline++, ~~strike~~",
+    title: arg.text({
+      about: "its title",
       optional: true,
-      max: ANNOUNCEMENT_BODY_AT_MOST,
+      max: ANNOUNCEMENT_TITLE_AT_MOST,
+      secret: true,
     }),
+    body: {
+      ...arg.markdown({
+        about:
+          "its text: ## headings, lists, > quotes, **bold**, *italic*, ++underline++, ~~strike~~",
+        optional: true,
+        max: ANNOUNCEMENT_BODY_AT_MOST,
+      }),
+      // A draft is its writer's, and the board's feed is not. The console hides any argument that
+      // says so, and `arg.markdown` has no option to say it with.
+      secret: true,
+    },
     category: arg.enum(ANNOUNCEMENT_CATEGORIES, {
       about: "what it is about",
       optional: true,
@@ -298,7 +308,9 @@ export const announcement = defineCommand({
         await ctx.records(announcementPictures).archive(existing.data.picturesId);
       }
       await records.archive(existing.id);
-      await emit(ctx, "announcement-changed", { id: existing.id });
+      if (existing.data.state === "published") {
+        await emit(ctx, "announcement-changed", { id: existing.id });
+      }
       return { text: words.announcementRemoved(existing.data.title), data: { id: existing.id } };
     }
 
@@ -370,9 +382,12 @@ export const announcement = defineCommand({
         : await records.update(existing.id, next, {
             baseVersion: args.base ?? existing.version,
           });
-    await emit(ctx, going ? "announcement-published" : "announcement-changed", {
-      id: saved.id,
-    });
+    // A draft is nobody else's, and neither is that one is being written.
+    if (going || before.state === "published") {
+      await emit(ctx, going ? "announcement-published" : "announcement-changed", {
+        id: saved.id,
+      });
+    }
     const title = next.title.length > 0 ? next.title : words.untitled;
     return {
       text: going
@@ -392,7 +407,12 @@ export const announcementPicture = defineCommand({
   args: {
     id: arg.record("announcements", { about: "the announcement", positional: true }),
     picture: arg.file({ about: "a PNG, JPEG, WebP or GIF" }),
-    alt: arg.text({ about: "what it shows, in a few words", optional: true, max: 200 }),
+    alt: arg.text({
+      about: "what it shows, in a few words",
+      optional: true,
+      max: 200,
+      secret: true,
+    }),
   },
   roles: [ROLE_HR],
   async run(ctx, args) {

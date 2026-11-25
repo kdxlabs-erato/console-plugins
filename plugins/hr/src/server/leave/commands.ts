@@ -415,7 +415,12 @@ export const request = defineCommand({
         "a part of one day, as the kind allows: am or pm a half, q1 to q4 a quarter; the whole day unless said",
       optional: true,
     }),
-    reason: arg.text({ about: "why; some kinds of leave ask for it", optional: true, max: 2000 }),
+    reason: arg.text({
+      about: "why; some kinds of leave ask for it",
+      optional: true,
+      max: 2000,
+      secret: true,
+    }),
     person: arg.person({
       about: "whose leave, for their manager or HR; the caller's unless said",
       optional: true,
@@ -471,15 +476,11 @@ export const request = defineCommand({
       { owner: target.id },
     );
     if (forOther) {
-      await emit(ctx, "leave-recorded", {
-        requestId: created.id,
-        personId: target.id,
-        by: actor.id,
-      });
+      await emit(ctx, "leave-recorded", { requestId: created.id });
     }
     if (next === null) {
       await writeUse(ctx, created, actor.id);
-      await emit(ctx, "leave-approved", { requestId: created.id, personId: target.id });
+      await emit(ctx, "leave-approved", { requestId: created.id });
       return {
         text: forOther ? words.recorded(who, created.id) : words.approved(created.id),
         data: created,
@@ -495,7 +496,7 @@ export const request = defineCommand({
     const updated = await ctx
       .records(requests)
       .update(created.id, { decisionId: raised.id, asked: raised.asked });
-    await emit(ctx, "leave-requested", { requestId: created.id, personId: target.id });
+    await emit(ctx, "leave-requested", { requestId: created.id });
     return {
       text: forOther ? words.recordedWaiting(who, created.id) : words.requested(created.id),
       data: updated,
@@ -511,7 +512,7 @@ export const cancel = defineCommand({
       about: "the request, your own unless you are HR",
       positional: true,
     }),
-    reason: arg.text({ about: "why", optional: true, max: 2000 }),
+    reason: arg.text({ about: "why", optional: true, max: 2000, secret: true }),
   },
   roles: [ROLE_MEMBER, ROLE_HR],
   async run(ctx, args) {
@@ -542,10 +543,7 @@ export const cancel = defineCommand({
         { baseVersion: found.version },
       );
       await reverseUse(ctx, found, actor.id);
-      await emit(ctx, "leave-cancelled", {
-        requestId: found.id,
-        personId: found.data.personId,
-      });
+      await emit(ctx, "leave-cancelled", { requestId: found.id });
       return { text: words.cancelled(found.id), data: updated };
     };
     switch (found.data.state) {
@@ -590,7 +588,7 @@ export const cancel = defineCommand({
       },
       { baseVersion: found.version },
     );
-    await emit(ctx, "leave-cancelling", { requestId: found.id, personId: found.data.personId });
+    await emit(ctx, "leave-cancelling", { requestId: found.id });
     return { text: words.cancellationRequested(found.id), data: updated, waiting: raised.id };
   },
 });
@@ -600,7 +598,11 @@ export const adjust = defineCommand({
   args: {
     person: arg.person({ about: "whose balance", positional: true }),
     days: arg.number({ about: "days to give, negative to take, in quarters", min: -366, max: 366 }),
-    note: arg.text({ about: "why, for the record", max: 500 }),
+    note: arg.text({
+      about: "why; the person reads it in their ledger, as does whoever may see their balance",
+      max: 500,
+      secret: true,
+    }),
     type: arg.text({ about: "the kind of leave; annual unless said", optional: true, max: 32 }),
     on: arg.day({ about: "the day it takes effect; today unless said", optional: true }),
     expires: arg.day({
@@ -670,10 +672,7 @@ export const adjust = defineCommand({
       note: args.note.trim(),
       by: actor.id,
     });
-    await emit(ctx, "balance-adjusted", {
-      personId: record.data.personId,
-      entryId: created.id,
-    });
+    await emit(ctx, "balance-adjusted", { entryId: created.id });
     return {
       text: words.adjusted(
         daysText(args.days, words),
@@ -753,7 +752,12 @@ export const enroll = defineCommand({
       about: "the kind of employment",
       optional: true,
     }),
-    note: arg.text({ about: "a note for HR", optional: true, max: 2000 }),
+    note: arg.text({
+      about: "a note that HR alone reads",
+      optional: true,
+      max: 2000,
+      secret: true,
+    }),
     clear: arg.list(arg.enum(["work-days", "title", "note", "left-on"]), {
       about: "fields to empty",
       optional: true,
@@ -836,7 +840,7 @@ export const enroll = defineCommand({
         }
       }
     }
-    await emit(ctx, "person-changed", { personId: saved.data.personId });
+    await emit(ctx, "person-changed", {});
     return {
       text: said.join(" "),
       data: { record: saved, written },
@@ -871,7 +875,7 @@ export const offboard = defineCommand({
         { leftOn, leave: leftOn < clock.today ? false : existing.data.leave },
         { baseVersion: existing.version },
       );
-    await emit(ctx, "person-changed", { personId: saved.data.personId });
+    await emit(ctx, "person-changed", {});
     return { text: words.offboarded(args.person.name ?? args.person.login, leftOn), data: saved };
   },
 });
@@ -1092,7 +1096,7 @@ export const policy = defineCommand({
       }
       await unsetDefaultPolicies(ctx, saved.id);
     }
-    await emit(ctx, "policy-changed", { key: saved.data.key });
+    await emit(ctx, "policy-changed", {});
     return {
       text: `${words.policySaved(saved.data.key)} ${policyReadback(saved.data, words)}`,
       data: saved,
@@ -1318,7 +1322,7 @@ export const type = defineCommand({
       existing === null
         ? await ctx.records(types).create(next)
         : await ctx.records(types).update(existing.id, next, { baseVersion: existing.version });
-    await emit(ctx, "type-changed", { key: saved.data.key });
+    await emit(ctx, "type-changed", {});
     const clock = await clockOf(ctx);
     return {
       text: `${words.typeSaved(saved.data.key)} ${words.readback.type(saved.data, clock.timeZone)}`,
@@ -1498,7 +1502,7 @@ export const setup = defineCommand({
         holidaysWritten += await writeHolidays(ctx, args.country, candidate);
       }
     }
-    await emit(ctx, "policy-changed", { key: presetKey });
+    await emit(ctx, "policy-changed", {});
     const annual = await typeByKey(ctx, ANNUAL);
     const readback = await setupReadback(
       ctx,
@@ -1618,7 +1622,7 @@ export const configure = defineCommand({
       patch.holidayCalendar = args["holiday-calendar"] as Config["holidayCalendar"];
     }
     const saved = await writeConfig(ctx, patch);
-    await emit(ctx, "config-changed", { fields: Object.keys(patch) });
+    await emit(ctx, "config-changed", {});
     return {
       text: `${words.configSaved} ${await lineReadback(ctx, saved.data, words)}`,
       data: saved,
@@ -1761,7 +1765,7 @@ export const recount = defineCommand({
       const now = await balanceOf(ctx, record.data, policy.data, annual, clock.today);
       said.push(words.readback.available(daysText(now.available, words), clock.today));
     }
-    await emit(ctx, "person-changed", { personId: record.data.personId });
+    await emit(ctx, "person-changed", {});
     return {
       text: said.join(" "),
       data: { reversed: reversed.length, written: outcome.written },
@@ -1773,7 +1777,11 @@ export const reverse = defineCommand({
   about: "HR: reverses a line written with adjust, by its id from ledger, with a note.",
   args: {
     line: arg.record("ledger", { about: "the line, by its id", positional: true }),
-    note: arg.text({ about: "why, for the record", max: 500 }),
+    note: arg.text({
+      about: "why; the person reads it in their ledger, as does whoever may see their balance",
+      max: 500,
+      secret: true,
+    }),
   },
   roles: [ROLE_HR],
   async run(ctx, args) {
@@ -1797,10 +1805,7 @@ export const reverse = defineCommand({
     const created = await ctx
       .records(ledger)
       .create(reversalOf(lineOf(found), args.note.trim(), actor.id));
-    await emit(ctx, "balance-adjusted", {
-      personId: found.data.personId,
-      entryId: created.id,
-    });
+    await emit(ctx, "balance-adjusted", { entryId: created.id });
     const typeRecord = await typeByKey(ctx, found.data.type);
     const record = await personRecord(ctx, found.data.personId);
     return {

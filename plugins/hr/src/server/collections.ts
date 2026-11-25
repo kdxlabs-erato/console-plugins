@@ -183,7 +183,8 @@ export const types = defineCollection("types", {
     enabled: z.boolean(),
   }),
   indexes: ["key", "enabled", "order"],
-  read: ["member"],
+  // HR's, since a kind turned off is: everyone reads the kinds offered through the query `types`.
+  read: ["hr"],
 });
 
 export const requests = defineCollection("requests", {

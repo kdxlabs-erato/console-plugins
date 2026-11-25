@@ -1118,6 +1118,14 @@ describe("requests, calendar and the overview", () => {
       ["2026-11-11", null, "requested"],
     ]);
     expect(JSON.stringify(asBob)).not.toContain("secret");
+    // Who is out and when: no id of the request, which its events carry to everyone.
+    expect(Object.keys(asBob.entries[0] ?? {}).sort()).toEqual([
+      "on",
+      "part",
+      "person",
+      "state",
+      "type",
+    ]);
     const asManager = (await calendar.run(ctx.as(MANAGER), {
       from: "2026-11-01",
       to: "2026-11-30",
@@ -2582,6 +2590,39 @@ describe("a person's lines after the policy changed", () => {
     await expect(recount.run(ctx, { person: personOf(BOB) })).rejects.toMatchObject({
       code: "not_enrolled",
     });
+  });
+});
+
+describe("what every member hears", () => {
+  it("names nobody in an event, whatever HR and a person do of their leave", async () => {
+    const theBoard = board();
+    const ctx = await korea(theBoard);
+    const asked = await request.run(ctx.as(ALICE), { from: "2026-11-10", reason: "a surgery" });
+    await cancel.run(ctx.as(ALICE), { id: (asked.data as { id: string }).id, reason: "put off" });
+    await request.run(ctx.as(MANAGER), { from: "2026-11-12", person: personOf(ALICE) });
+    const line = await adjust.run(ctx, { person: personOf(ALICE), days: -1, note: "a correction" });
+    await reverse.run(ctx, { line: (line.data as { id: string }).id, note: "not that one" });
+    await enroll.run(ctx, { person: personOf(ALICE), note: "for HR alone" });
+    await policy.run(ctx, { key: "executives", preset: "manual" });
+    await type.run(ctx, { key: "burnout", name: ["en=Burnout"], enabled: "off" });
+    await configure.run(ctx, { "balance-visibility": "self" });
+    await offboard.run(ctx, { person: personOf(ALICE), on: "2026-12-31" });
+    const kinds = new Set(ctx.emitted.map((event) => event.kind));
+    for (const kind of [
+      "leave-requested",
+      "leave-recorded",
+      "balance-adjusted",
+      "person-changed",
+    ]) {
+      expect(kinds).toContain(kind);
+    }
+    const heard = JSON.stringify(ctx.emitted.map((event) => event.data));
+    for (const who of [ALICE, MANAGER, HR]) {
+      expect(heard).not.toContain(personOf(who).id);
+    }
+    for (const word of ["executives", "burnout", "balanceVisibility", "surgery", "correction"]) {
+      expect(heard).not.toContain(word);
+    }
   });
 });
 

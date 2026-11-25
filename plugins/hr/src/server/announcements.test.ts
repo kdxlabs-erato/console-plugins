@@ -127,6 +127,29 @@ describe("a draft", () => {
     expect((await listOf(ctx, HR, { scope: "drafts", search: "Year-end" })).items).toHaveLength(1);
   });
 
+  it("is told of to nobody: no event says one is written, changed or thrown away", async () => {
+    const ctx = context();
+    const id = await draft(ctx);
+    await announcement.run(ctx, { id, title: "Another name" });
+    const other = await draft(ctx, "Thrown away");
+    await announcement.run(ctx, { id: other, remove: true });
+    expect(ctx.emitted).toEqual([]);
+    await announcement.run(ctx, { id, publish: true });
+    await announcement.run(ctx, { id, body: "We meet on **Thursday**." });
+    await announcement.run(ctx, { id, withdraw: true });
+    // Taken down, it is a draft again, and what is done to it is its writer's.
+    await announcement.run(ctx, { id, title: "Yet another name" });
+    expect(ctx.emitted).toEqual([
+      { kind: "announcement-published", data: { id } },
+      { kind: "announcement-changed", data: { id } },
+      { kind: "announcement-changed", data: { id } },
+    ]);
+    await announcement.run(ctx, { id, publish: true });
+    await announcement.run(ctx, { id, remove: true });
+    expect(ctx.emitted.at(-1)).toEqual({ kind: "announcement-changed", data: { id } });
+    expect(ctx.emitted).toHaveLength(5);
+  });
+
   it("is not changed, published, given a picture or removed by anyone else in HR", async () => {
     const ctx = context();
     const id = await draft(ctx);

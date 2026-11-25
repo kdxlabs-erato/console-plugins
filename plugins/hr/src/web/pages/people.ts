@@ -211,7 +211,7 @@ function recordForm(
       words.moreOfRecord,
       formRow(field(words.titleHeader, title), field(words.employmentLabel, employment)),
       group(words.workDaysLabel, useWorkspace.wrapper, workDays.node),
-      field(words.noteLabel, note),
+      field(words.noteLabel, note, words.noteForHr),
     ),
     actions(submit),
     status,
@@ -287,7 +287,7 @@ function adjustForm(item: PersonRow, view: View, onSaved: () => Promise<void>): 
       field(words.adjustKindLabel, kind),
       field(words.expiresLabel, expires),
     ),
-    field(words.noteLabel, note),
+    field(words.noteLabel, note, words.noteForPerson),
     actions(submit),
     status,
   );
@@ -367,7 +367,7 @@ function reverseForm(item: PersonRow, view: View, onSaved: () => Promise<void>):
     const status = statusLine();
     const node = form(
       field(words.reverseLineLabel, line),
-      field(words.noteLabel, note),
+      field(words.noteLabel, note, words.noteForPerson),
       actions(submit),
       status,
     );
