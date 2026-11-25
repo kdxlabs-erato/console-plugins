@@ -1574,7 +1574,8 @@ export const configure = defineCommand({
       optional: true,
     }),
     "calendar-shows-type": arg.enum(ON_OFF, {
-      about: "the calendar shows the kind of leave",
+      about:
+        "colleagues read the kind of leave, on the calendar and where another plugin tells of it",
       optional: true,
     }),
     "work-days": arg.list(arg.enum(WEEKDAYS as unknown as [Weekday, ...Weekday[]]), {

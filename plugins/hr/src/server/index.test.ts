@@ -1055,6 +1055,19 @@ describe("requests, calendar and the overview", () => {
     expect(own[0]?.request.reason).toBe("A clinic");
   });
 
+  it("says whether colleagues may read the kind, as HR set it for the calendar", async () => {
+    const ctx = await korea(board());
+    const asked = await request.run(ctx.as(ALICE), { from: "2026-11-10" });
+    const { id } = asked.data as { id: string };
+    const read = async () => (await requestView.run(ctx.as(ALICE), { id })) as RequestView;
+    expect((await read()).typeShown).toBe(false);
+    await configure.run(ctx, { "calendar-shows-type": "on" });
+    expect((await read()).typeShown).toBe(true);
+    expect(((await requestsQuery.run(ctx.as(ALICE), {})) as RequestView[])[0]?.typeShown).toBe(
+      true,
+    );
+  });
+
   it("refuses HR its own leave as approved: nobody approves their own", async () => {
     const ctx = await korea(board());
     await enroll.run(ctx, { person: personOf(HR), leave: "on", "hired-on": "2024-01-02" });

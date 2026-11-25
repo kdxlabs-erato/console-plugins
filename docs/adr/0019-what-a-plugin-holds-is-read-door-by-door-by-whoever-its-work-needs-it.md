@@ -1,6 +1,6 @@
 # ADR-0019: What a plugin holds is read door by door, by whoever its work needs it
 
-- Status: Accepted
+- Status: Accepted; what it proposes to the console is not pursued ([ADR-0020](0020-what-a-channel-is-told-of-leave-follows-hrs-own-settings.md))
 - Date: 2026-11-25
 - Adds to [ADR-0010](0010-a-plugins-events-and-api-are-its-contract-with-other-plugins-and-a-plugin-calling-for-a-person-is-that-person.md), whose thin event, "the ids and the kind and nothing a holder of its roles may not read", it makes exact.
 

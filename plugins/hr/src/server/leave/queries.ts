@@ -180,21 +180,34 @@ function inLine(request: LeaveRequest, id: string): boolean {
 
 /**
  * What a request's view reads beyond the record: the day and the time, the kinds with their rules
- * of cancelling, and the administrators, who stand in for a manager nobody has.
+ * of cancelling, the administrators, who stand in for a manager nobody has, and whether HR shows
+ * the kind to colleagues.
  */
 interface Terms {
   readonly today: string;
   readonly time: string;
   readonly kinds: ReadonlyMap<string, LeaveType>;
   readonly admins: readonly string[];
+  readonly typeShown: boolean;
 }
 
-async function termsOf(ctx: PluginContext, clock: Clock, directoryMap: Directory): Promise<Terms> {
+async function termsOf(
+  ctx: PluginContext,
+  config: Config,
+  clock: Clock,
+  directoryMap: Directory,
+): Promise<Terms> {
   const kinds = new Map((await allTypes(ctx)).map((record) => [record.data.key, record.data]));
   const admins = [...directoryMap.values()]
     .filter((person) => person.role === "admin" && person.status === "active")
     .map((person) => person.id);
-  return { today: clock.today, time: clock.time, kinds, admins };
+  return {
+    today: clock.today,
+    time: clock.time,
+    kinds,
+    admins,
+    typeShown: config.calendarShowsType,
+  };
 }
 
 /**
@@ -306,6 +319,7 @@ function viewOf(
       requestedVia: data.requestedVia,
       decidedAt: data.decidedAt,
     },
+    typeShown: terms.typeShown,
     recordedBy:
       data.requestedBy === data.personId ? null : briefOf(data.requestedBy, directoryMap, null),
     decidedBy: data.decidedBy === null ? null : briefOf(data.decidedBy, directoryMap, null),
@@ -485,7 +499,7 @@ export const requestsQuery = defineQuery({
       where,
       order: { field: "from", descending: true },
     });
-    const terms = await termsOf(ctx, clock, directoryMap);
+    const terms = await termsOf(ctx, config, clock, directoryMap);
     const views = items.map((item) =>
       viewOf(
         actor,
@@ -531,7 +545,7 @@ export async function requestViewOf(ctx: PluginContext, id: string): Promise<Req
     actor,
     found,
     briefOf(data.personId, directoryMap, null, actor),
-    await termsOf(ctx, clock, directoryMap),
+    await termsOf(ctx, config, clock, directoryMap),
     directoryMap,
     reach,
   );
@@ -911,7 +925,7 @@ export const overview = defineQuery({
       where: { personId: actor.id, to: { gte: clock.today } },
       order: { field: "from" },
     });
-    const terms = await termsOf(ctx, clock, directoryMap);
+    const terms = await termsOf(ctx, config, clock, directoryMap);
     const upcoming = await followable(
       ctx,
       actor,

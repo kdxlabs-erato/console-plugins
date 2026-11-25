@@ -57,7 +57,7 @@ A plugin's data leaves it by more doors than its queries, and each is opened to 
 | The board: a decision, a task, a document | whom a decision is for and those above them; the project's members | what they need to answer or to work; the README says who the project's members should be |
 | A file | whoever reads its record | a record of its own where the file's readers are not the record's |
 | The `api`, for other plugins | a plugin with `plugins:<key>`, under the roles the console gives its call | what the command or the query of the same name answers |
-| What leaves the console: a message, a request | whoever is at the other end | what they may read on the console; a channel is everyone in it |
+| What leaves the console: a message, a request | whoever is at the other end | what they may read on the console; a channel is everyone in it, and what a producer's own settings keep from colleagues is not said there ([ADR-0020](../adr/0020-what-a-channel-is-told-of-leave-follows-hrs-own-settings.md)) |
 | The log, `ctx.log` | whoever runs the deployment | a code, a count, never a person or what they wrote |
 
 - What is not kept is read by nobody: a log's line says when, what kind, how it went and why, and keeps whom it reached only while a retry needs them, and which thing it was of only where whoever may open that thing looks into a failure.

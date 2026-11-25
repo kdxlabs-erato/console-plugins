@@ -477,6 +477,11 @@ export interface RequestView {
   readonly id: string;
   readonly person: PersonBrief;
   readonly request: RequestFacts;
+  /**
+   * Whether the person's colleagues may read the kind, as HR set it for the calendar: whoever tells
+   * them of the leave, another plugin among them, says the kind only where they may.
+   */
+  readonly typeShown: boolean;
   /** Who wrote it, where that is not the person whose leave it is. */
   readonly recordedBy: PersonBrief | null;
   /** Who decided it, once someone has. */

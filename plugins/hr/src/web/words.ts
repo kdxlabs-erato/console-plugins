@@ -554,8 +554,9 @@ const ENGLISH = {
   balanceVisibilityHint: "Their history follows the same rule.",
   calendarVisibilityLabel: "Who sees who is out",
   calendarVisibilityHint: "A reason is never shown on the calendar.",
-  calendarKindLabel: "On the calendar",
-  calendarKindHint: "Off, it says only that a person is out.",
+  calendarKindLabel: "What colleagues read",
+  calendarKindHint:
+    "Without it, only that a person is out: on the calendar, and where another plugin tells of leave.",
   calendarShowsTypeLabel: "Show the kind of leave",
 
   announcementsTitle: "Announcements",
@@ -1169,8 +1170,9 @@ const KOREAN: Words = {
   balanceVisibilityHint: "신청 내역도 같은 범위를 따릅니다.",
   calendarVisibilityLabel: "누가 휴가인지 보는 사람",
   calendarVisibilityHint: "사유는 캘린더에 나오지 않습니다.",
-  calendarKindLabel: "캘린더 표시",
-  calendarKindHint: "끄면 휴가 중이라는 사실만 보입니다.",
+  calendarKindLabel: "동료에게 보이는 것",
+  calendarKindHint:
+    "표시하지 않으면 휴가 중이라는 사실만 보입니다. 캘린더와, 다른 플러그인이 알리는 휴가에 적용됩니다.",
   calendarShowsTypeLabel: "휴가 종류 표시",
 
   announcementsTitle: "공지사항",
