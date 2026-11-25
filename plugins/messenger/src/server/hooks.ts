@@ -2,8 +2,8 @@
 // and the routes tell in Slack; HR enabled, disabled or upgraded, which puts the leave shortcut in
 // the app's manifest or takes it away; and a person's address changed, or their coming back or
 // leaving, which their link to an account follows; and the boards' own events, a task given, moved,
-// changed, commented or put away, a decision raised, an agent account standing otherwise, which
-// each person they are about is told of as they chose (ADR-0015).
+// changed, commented or put away, a decision raised or answered, an agent account standing
+// otherwise, each sent on to whom the console told of it, as each chose (ADR-0017).
 import {
   type HookHandler,
   type PluginContext,

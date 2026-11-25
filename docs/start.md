@@ -14,7 +14,7 @@ Load the one the request names, and follow it to its end before acting on it. Ea
 | "Set leave up for Korea", "add Jihye, hired in March", "change who approves sick leave", "fix Minsu's balance", "Minsu leaves on the 31st" | `plugins/hr/skills/hr-administration` | HR's rules of leave, the people enrolled, the balances and the ledger, a leaver settled, the year exported. |
 | "Post the year-end holidays", "pin it", "take it down" | `plugins/hr/skills/hr-announcements` | An announcement drafted, published, pinned, changed or removed. |
 | "Connect our Slack", "send approved leave to #people", "why does Jihye get no messages?" | `plugins/messenger/skills/messenger` | The Slack app made and installed, the routes of each plugin's events, people matched to their accounts, what was sent and why something was not. |
-| "Tell me in Slack when a task is given to me", "only once a day", "stop the messages about this project" | `plugins/messenger/skills/my-notifications` | What the person is told in Slack of their own work, at once or once a day, per project. |
+| "Tell me in Slack when a task is given to me", "only once a day", "stop the Slack messages about comments" | `plugins/messenger/skills/my-notifications` | Which of what the console tells the person reaches them in Slack too, at once or once a day; and where the rest is chosen, the console's own notification settings. |
 
 A request for an area no plugin here takes over yet, customers or money, has no skill: say so, and that [the roadmap](roadmap.md) names it as planned.
 

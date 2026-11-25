@@ -1,10 +1,12 @@
-// What a person is told of their own work (ADR-0015): each of the console's events told to whom it
-// is about, never whoever made it, as each chose, in their language and in a workspace they have
-// an account in, the project's first; once a day where they chose so; turned off from the message
-// itself; and the choice made on the page and through their agent with `notify` and `notices`.
-import type { PluginHookEvent } from "@skillcdn/console/plugin";
+// What the console told a member of, sent on to them in Slack (ADR-0017): each of the console's
+// events sent to whom the console told of it and to nobody else, never to whom it woke itself, as
+// each chose here, in their language and in a workspace they have an account in, the project's
+// first; once a day where they chose so; turned off from the message itself; and the choice made
+// on the page and through their agent with `notify` and `notices`.
+import { NOTIFICATION_KINDS } from "@skillcdn/console/api";
+import { defineCollection, type PluginHookEvent, z } from "@skillcdn/console/plugin";
 import { describe, expect, it } from "vitest";
-import type { NoticesView, ProjectNoticesView } from "../shared/contracts.js";
+import { NOTICE_KINDS, type NoticesView, type ProjectNoticesView } from "../shared/contracts.js";
 import {
   day,
   dueDay,
@@ -13,6 +15,7 @@ import {
   onOwnWork,
   projectNotices,
   slackEndpoint,
+  toVersion4,
   unheard,
 } from "./index.js";
 import {
@@ -22,7 +25,6 @@ import {
   HANA,
   JIHYE,
   linked,
-  MEMBER_JIHYE,
   MEMBER_MINSU,
   MINSU,
   NOW,
@@ -55,8 +57,26 @@ function task(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** One member the console told of an event, as it hands them over in `data.told`. */
+const told = (
+  person: { readonly id: string },
+  kind: string,
+  more: { readonly woken?: boolean; readonly followed?: boolean } = {},
+) => ({
+  personId: person.id,
+  kind,
+  woken: more.woken ?? false,
+  followed: more.followed ?? false,
+});
+type Told = ReturnType<typeof told>;
+
 let sequence = 0;
-function event(kind: string, data: Record<string, unknown>, actor = HANA): PluginHookEvent {
+/** An event of the console's, with whom the console told of it: nobody unless said. */
+function event(
+  kind: string,
+  data: Record<string, unknown>,
+  whom: readonly Told[] = [],
+): PluginHookEvent {
   sequence += 1;
   return {
     source: "console",
@@ -66,7 +86,7 @@ function event(kind: string, data: Record<string, unknown>, actor = HANA): Plugi
     at: NOW.toISOString(),
     plugin: null,
     project: kind.startsWith("agent.") ? null : PROJECT,
-    data: { actor: brief(actor), agent: null, ...data },
+    data: { actor: brief(HANA), agent: null, told: whom, ...data },
   };
 }
 
@@ -75,6 +95,8 @@ async function ready(
     readonly task?: Record<string, unknown>;
     /** What each task is, by its number, where a test tells of several. */
     readonly tasks?: (number: number) => Record<string, unknown>;
+    /** What the decision is beside its deciders: the plugin that raised it, say. */
+    readonly decision?: Record<string, unknown>;
     readonly now?: () => Date;
     readonly slack?: ReturnType<typeof fakeSlack>;
   } = {},
@@ -106,6 +128,8 @@ async function ready(
           id: DECISION,
           decider: brief(MINSU),
           deciders: [brief(MINSU), brief(JIHYE)],
+          plugin: null,
+          ...options.decision,
         }),
       },
       projects: { list: async () => [{ id: PROJECT.id, key: PROJECT.key, name: "Web" }] },
@@ -123,11 +147,15 @@ const toWhom = (slack: ReturnType<typeof fakeSlack>) =>
 const blocksOf = (call: { params: Readonly<Record<string, string>> } | undefined) =>
   call?.params.blocks ?? "";
 
+const BOTH = [told(JIHYE, "assigned"), told(MINSU, "assigned")];
+
 describe("a task's events", () => {
-  it("tells whom a task was given to, in their language, with its address and a button that turns the kind off", async () => {
+  it("sends an event on to whom the console told of it, in their language, with its address and a button that turns the kind off", async () => {
     const { hook, slack, ctx } = await ready();
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12, title: "x" }));
-    // Hana made it: Jihye, who owns it, and Minsu, who works on it, are told; Hana is not.
+    await onOwnWork(
+      hook,
+      event("task.created", { taskId: task().id, number: 12, title: "x" }, BOTH),
+    );
     expect(toWhom(slack).sort()).toEqual(["U0JIHYE01", "U0MINSU01"]);
     const toMinsu =
       slack.of("chat.postMessage")[
@@ -150,17 +178,67 @@ describe("a task's events", () => {
     expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "sent", note: "told:2" });
   });
 
-  it("tells each event once, however often it is delivered", async () => {
-    const { hook, slack } = await ready();
-    const once = event("task.moved", {
-      taskId: task().id,
-      number: 12,
-      from: "ready",
-      to: "in_review",
+  it("sends to nobody the console did not tell, nor to whom it woke itself", async () => {
+    const { hook, slack, ctx } = await ready();
+    // Jihye owns the task and Minsu works on it: the console told neither, so neither is sent it.
+    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, []));
+    expect(slack.calls).toHaveLength(0);
+    expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "nobody" });
+    // An agent account learned of it by the console's own wake.
+    await onOwnWork(
+      hook,
+      event("task.commented", { number: 12, excerpt: "Hi" }, [
+        told(MINSU, "commented", { woken: true }),
+      ]),
+    );
+    // A console that hands the plugin no list tells nobody through it.
+    await onOwnWork(hook, {
+      ...event("task.commented", { number: 12, excerpt: "Hi" }),
+      data: { actor: brief(HANA), agent: null, number: 12, excerpt: "Hi" },
     });
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  it("reads whom the console told as data: what is no list, no entry or no kind tells nobody", async () => {
+    const { hook, slack } = await ready();
+    const hostile: unknown[] = [
+      "everyone",
+      { personId: MINSU.id, kind: "commented", woken: false },
+      [null, 5, "x", { personId: MINSU.id }],
+      [{ personId: MINSU.id, kind: "commented" }],
+      [{ personId: { $ne: "" }, kind: "commented", woken: false }],
+      [{ personId: "x".repeat(5000), kind: "commented", woken: false }],
+      [{ personId: MINSU.id, kind: "everything", woken: false }],
+      [{ personId: MINSU.id, kind: "commented", woken: "no" }],
+      // A kind that is none of a task's says nothing of a task.
+      [{ personId: MINSU.id, kind: "answered", woken: false }],
+    ];
+    for (const whom of hostile) {
+      await onOwnWork(hook, {
+        ...event("task.commented", {}),
+        data: { actor: brief(HANA), agent: null, number: 12, excerpt: "Hi", told: whom },
+      });
+    }
+    // A list longer than any console makes is read to its first hundred.
+    const many = Array.from({ length: 5000 }, (_, index) =>
+      told({ id: `0199f000-0000-7000-8000-${String(index).padStart(12, "0")}` }, "commented"),
+    );
+    await onOwnWork(
+      hook,
+      event("task.commented", { number: 12, excerpt: "Hi" }, [...many, told(MINSU, "commented")]),
+    );
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  it("sends each event once, however often it is delivered", async () => {
+    const { hook, slack } = await ready();
+    const once = event(
+      "task.moved",
+      { taskId: task().id, number: 12, from: "ready", to: "in_review" },
+      [told(JIHYE, "moved")],
+    );
     await onOwnWork(hook, once);
     await onOwnWork(hook, { ...once, attempt: 2 });
-    // A move is told to whoever owns the task alone.
     expect(toWhom(slack)).toEqual(["U0JIHYE01"]);
     expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("*Ready → In review* · Park Hana");
   });
@@ -169,11 +247,15 @@ describe("a task's events", () => {
     const { hook, slack } = await ready();
     await onOwnWork(
       hook,
-      event("task.commented", {
-        taskId: task().id,
-        number: 12,
-        excerpt: `Looks > good & <@U0EVERYONE> ${"long ".repeat(80)}`,
-      }),
+      event(
+        "task.commented",
+        {
+          taskId: task().id,
+          number: 12,
+          excerpt: `Looks > good & <@U0EVERYONE> ${"long ".repeat(80)}`,
+        },
+        [told(JIHYE, "commented")],
+      ),
     );
     const comment = blocksOf(slack.of("chat.postMessage")[0]);
     expect(comment).toContain("*New comment* · Park Hana");
@@ -181,62 +263,78 @@ describe("a task's events", () => {
     expect(comment).not.toContain("<@U0EVERYONE>");
     // A run the console gave up on is moved by nobody: no name, and a state it has no word for as it is.
     await onOwnWork(hook, {
-      ...event("task.moved", { taskId: task().id, number: 12, to: "on_hold" }),
-      data: { actor: null, agent: null, taskId: task().id, number: 12, to: "on_hold" },
+      ...event("task.moved", {}),
+      data: {
+        actor: null,
+        agent: null,
+        taskId: task().id,
+        number: 12,
+        to: "on_hold",
+        told: [told(JIHYE, "moved")],
+      },
     });
     const moved = blocksOf(slack.of("chat.postMessage").at(-1));
     expect(moved).toContain("*→ on_hold*\\n");
   });
 
-  it("tells a change only to whoever turned it on, and whom a change put to work as given the task", async () => {
-    const { hook, slack, ctx } = await ready();
-    await notify.run(ctx, { on: ["changed"] });
-    await onOwnWork(
-      hook,
-      event("task.updated", {
-        taskId: task().id,
-        number: 12,
-        fields: ["title", "workers"],
-        workersAdded: [JIHYE.id],
-      }),
-    );
-    const said = slack.of("chat.postMessage").map((call) => blocksOf(call));
-    expect(said.some((blocks) => blocks.includes("*제목 변경* · Park Hana"))).toBe(true);
-    expect(said.some((blocks) => blocks.includes("*Given to you* · Park Hana"))).toBe(true);
-    // Jihye, given it, is not told of the change besides; Minsu, who chose changes, is.
-    expect(toWhom(slack).sort()).toEqual(["U0JIHYE01", "U0MINSU01"]);
-  });
-
-  it("tells nobody what they did themselves, unless their own agent did it and they count it", async () => {
-    const { hook, slack, ctx } = await ready({ task: { owner: brief(MINSU), workers: [] } });
-    await onOwnWork(
-      hook,
-      event("task.commented", { taskId: task().id, number: 12, excerpt: "Done" }, MINSU),
-    );
-    expect(slack.calls).toHaveLength(0);
-    await notify.run(ctx, { "own-agents": true });
+  it("says what each was told under: a task given, one ready to begin, and what changed of one", async () => {
+    const { hook, slack } = await ready();
+    const said = () => slack.of("chat.postMessage").map((call) => blocksOf(call));
     await onOwnWork(
       hook,
       event(
-        "task.commented",
-        { taskId: task().id, number: 12, excerpt: "Done", agent: "claude" },
-        MINSU,
+        "task.updated",
+        {
+          taskId: task().id,
+          number: 12,
+          fields: ["title", "workers", "estimate"],
+          workersAdded: [JIHYE.id],
+        },
+        [told(JIHYE, "assigned"), told(MINSU, "changed")],
       ),
     );
-    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
-  });
-
-  it("tells nothing of a kind or a project turned off", async () => {
-    const { hook, slack, ctx } = await ready();
-    await notify.run(ctx, { off: ["commented"] });
-    await notify.run(ctx.as(MEMBER_JIHYE), {
-      mute: [{ id: PROJECT.id, key: PROJECT.key, name: "Web" }],
-    });
+    // Each field by its name, and one the words do not name left out.
+    expect(said().some((blocks) => blocks.includes("*제목, 작업자 변경* · Park Hana"))).toBe(true);
+    expect(said().some((blocks) => blocks.includes("*Given to you* · Park Hana"))).toBe(true);
+    expect(toWhom(slack).sort()).toEqual(["U0JIHYE01", "U0MINSU01"]);
+    // One event is a move to its owner and work to begin to whoever is at work on it.
     await onOwnWork(
       hook,
-      event("task.commented", { taskId: task().id, number: 12, excerpt: "Hi" }),
+      event("task.moved", { number: 12, from: "idea", to: "ready" }, [
+        told(MINSU, "ready"),
+        told(JIHYE, "moved"),
+      ]),
     );
+    expect(said().some((blocks) => blocks.includes("*시작할 수 있는 작업* · Park Hana"))).toBe(
+      true,
+    );
+    expect(said().some((blocks) => blocks.includes("*Idea → Ready* · Park Hana"))).toBe(true);
+    // A change of nothing the words name is still a change.
+    await onOwnWork(
+      hook,
+      event("task.updated", { number: 12, fields: ["estimate"] }, [told(MINSU, "changed")]),
+    );
+    expect(said().at(-1)).toContain("*내용 변경* · Park Hana");
+  });
+
+  it("keeps out of Slack a kind turned off here, sends a task its member turned on whatever their kinds, and lets that be turned off too", async () => {
+    const { hook, slack, ctx } = await ready();
+    const comment = (whom: readonly Told[]) =>
+      onOwnWork(hook, event("task.commented", { number: 12, excerpt: "Hi" }, whom));
+    await notify.run(ctx, { off: ["commented"] });
+    await comment([told(MINSU, "commented")]);
     expect(slack.calls).toHaveLength(0);
+    // The task's bell, turned on in the console: everything on it is sent, the kind off or not.
+    await comment([told(MINSU, "commented", { followed: true })]);
+    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
+    // Its button turns off the tasks turned on, which is what let it through, and not the kind.
+    expect(blocksOf(slack.of("chat.postMessage")[0])).toContain('"value":"followed"');
+    await notify.run(ctx, { off: ["followed"], on: ["commented"] });
+    await comment([told(MINSU, "commented", { followed: true })]);
+    expect(toWhom(slack)).toHaveLength(1);
+    await comment([told(MINSU, "commented")]);
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(blocksOf(slack.of("chat.postMessage")[1])).toContain('"value":"commented"');
   });
 
   it("tells in the workspace the project is told in where the person has an account there", async () => {
@@ -245,7 +343,7 @@ describe("a task's events", () => {
     await linked(ctx, MINSU, "U0MINSU02", null, OTHER.id);
     const record = ctx.all("connections").find((found) => found.data.teamId === OTHER.id);
     await ctx.records("connections").update(record?.id ?? "", { projects: [PROJECT.id] });
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }));
+    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, BOTH));
     const opened = slack
       .of("conversations.open")
       .map((call) => [call.params.users, call.secrets[0]?.key]);
@@ -262,17 +360,19 @@ describe("a task's events", () => {
     const quiet = setup({ caller: MEMBER_MINSU, board: { tasks: { get: async () => task() } } });
     await onOwnWork(
       quiet.ctx.as(CONSOLE),
-      event("task.created", { taskId: task().id, number: 12 }),
+      event("task.created", { taskId: task().id, number: 12 }, BOTH),
     );
     expect(quiet.ctx.all("deliveries")[0]?.data).toMatchObject({
       outcome: "skipped",
       note: "not_connected",
     });
-    const { hook, slack, ctx } = await ready({ task: { owner: brief(HANA), workers: [] } });
-    // A comment, which Hana is told of unless she says otherwise; she has no account in Slack.
+    const { hook, slack, ctx } = await ready();
+    // The console told Hana, who has no account in Slack.
     await onOwnWork(
       hook,
-      event("task.commented", { taskId: task().id, number: 12, excerpt: "Hi" }, JIHYE),
+      event("task.commented", { taskId: task().id, number: 12, excerpt: "Hi" }, [
+        told(HANA, "commented"),
+      ]),
     );
     expect(slack.calls).toHaveLength(0);
     expect(ctx.all("deliveries")[0]?.data).toMatchObject({ outcome: "skipped", note: "nobody" });
@@ -280,58 +380,129 @@ describe("a task's events", () => {
 });
 
 describe("decisions and agent accounts", () => {
-  it("tells each decider of a decision raised, with its own address", async () => {
+  it("sends a decision to whom the console told of it, with its own address, and leaves HR's to their thread", async () => {
     const { hook, slack } = await ready();
-    await onOwnWork(hook, event("decision.raised", { decisionId: DECISION, question: "Ship it?" }));
+    await onOwnWork(
+      hook,
+      event("decision.raised", { decisionId: DECISION, question: "Ship it?" }, [
+        told(MINSU, "decision"),
+        told(JIHYE, "decision"),
+      ]),
+    );
     expect(toWhom(slack).sort()).toEqual(["U0JIHYE01", "U0MINSU01"]);
     expect(blocksOf(slack.of("chat.postMessage")[0])).toContain(`/decisions/${DECISION}`);
     await onOwnWork(
       hook,
-      event("decision.addressed", {
-        decisionId: DECISION,
-        question: "Ship it?",
-        decidersAdded: [JIHYE.id],
-      }),
+      event(
+        "decision.addressed",
+        { decisionId: DECISION, question: "Ship it?", decidersAdded: [JIHYE.id] },
+        [told(JIHYE, "decision")],
+      ),
     );
     expect(toWhom(slack).at(-1)).toBe("U0JIHYE01");
     // HR's own decisions are asked in the request's thread, never told here besides.
     const before = toWhom(slack).length;
     await onOwnWork(hook, {
-      ...event("decision.raised", { decisionId: DECISION, question: "Leave?" }),
+      ...event("decision.raised", { decisionId: DECISION, question: "Leave?" }, [
+        told(MINSU, "decision"),
+      ]),
       plugin: "hr",
     });
     expect(toWhom(slack)).toHaveLength(before);
   });
 
-  it("tells a manager their agent account stopped, and ran again, and nothing of a run that goes on", async () => {
+  it("reads a decision an agent account raised for its manager as the decision it is, under their agent accounts", async () => {
+    const { hook, slack, ctx } = await ready();
+    // The manager has decisions off in the console, which tells them of it as of their agent account.
+    const raised = () =>
+      onOwnWork(
+        hook,
+        event("decision.raised", { decisionId: DECISION, question: "Spend it?" }, [
+          told(MINSU, "agent"),
+        ]),
+      );
+    await raised();
+    const blocks = blocksOf(slack.of("chat.postMessage")[0]);
+    expect(blocks).toContain("*내 답을 기다리는 결정* · Park Hana");
+    expect(blocks).toContain(`/decisions/${DECISION}|Spend it?>`);
+    // The button turns off what let it through: their agent accounts.
+    expect(blocks).toContain('"value":"agent"');
+    await notify.run(ctx, { off: ["agent"] });
+    await raised();
+    expect(toWhom(slack)).toHaveLength(1);
+  });
+
+  it("sends the answer to a decision to whoever raised it, the option quoted, and leaves HR's to its thread", async () => {
+    const answered = [told(MINSU, "answered")];
+    const answer = { decisionId: DECISION, question: "Ship it?", option: "Yes, <!here> ship" };
     const { hook, slack } = await ready();
+    await onOwnWork(hook, event("decision.answered", answer, answered));
+    expect(toWhom(slack)).toEqual(["U0MINSU01"]);
+    const blocks = blocksOf(slack.of("chat.postMessage")[0]);
+    expect(blocks).toContain("*내 질문에 답변* · Park Hana");
+    expect(blocks).toContain(`/decisions/${DECISION}|Ship it?>`);
+    expect(blocks).toContain("\\n> Yes, &lt;!here&gt; ship");
+    // A kind that is none of an answer's says nothing of one.
+    await onOwnWork(hook, event("decision.answered", answer, [told(JIHYE, "decision")]));
+    expect(toWhom(slack)).toHaveLength(1);
+    // An answer names whoever carried it, so the decision is read for the plugin that raised it.
+    const ofHr = await ready({ decision: { plugin: "hr" } });
+    await onOwnWork(ofHr.hook, event("decision.answered", answer, answered));
+    expect(ofHr.slack.calls).toHaveLength(0);
+  });
+
+  it("sends a manager that their agent account stopped, and ran again, and nothing of a run that goes on", async () => {
+    const { hook, slack } = await ready();
+    const manager = [told(MINSU, "agent")];
     await onOwnWork(
       hook,
-      event("agent.state_changed", {
-        login: "bot-runner",
-        handle: "runner",
-        state: "failed",
-        was: "running",
-        detail: "out of credit",
-      }),
+      event(
+        "agent.state_changed",
+        {
+          login: "bot-runner",
+          handle: "runner",
+          state: "failed",
+          was: "running",
+          detail: "out of credit",
+        },
+        manager,
+      ),
     );
     expect(toWhom(slack)).toEqual(["U0MINSU01"]);
     expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("runner");
     expect(blocksOf(slack.of("chat.postMessage")[0])).toContain("out of credit");
     await onOwnWork(
       hook,
-      event("agent.state_changed", { login: "bot-runner", state: "running", was: "failed" }),
+      event(
+        "agent.state_changed",
+        { login: "bot-runner", state: "running", was: "failed" },
+        manager,
+      ),
     );
     await onOwnWork(
       hook,
-      event("agent.state_changed", { login: "bot-runner", state: "running", was: "unheard" }),
+      event(
+        "agent.state_changed",
+        { login: "bot-runner", state: "running", was: "unheard" },
+        manager,
+      ),
+    );
+    expect(toWhom(slack)).toHaveLength(2);
+    // The account reports to Minsu, and the console told nobody: they have the kind off there.
+    const stopped = { login: "bot-runner", state: "stopped", was: "running" };
+    await onOwnWork(hook, event("agent.state_changed", stopped));
+    // A manager that is an agent account itself was woken by the console.
+    await onOwnWork(
+      hook,
+      event("agent.state_changed", stopped, [told(MINSU, "agent", { woken: true })]),
     );
     expect(toWhom(slack)).toHaveLength(2);
   });
 });
 
 const MINUTE = 60_000;
-const RUNNER = "0199a000-0000-7000-8000-0000000000a9";
+/** Whom the console tells of the runner: Minsu, whom it reports to. */
+const MANAGER = [told(MINSU, "agent")];
 
 /** A clock a test moves, the runner's state said at its time, and the job run at it. */
 async function watched(options: { readonly slack?: ReturnType<typeof fakeSlack> } = {}) {
@@ -346,9 +517,14 @@ async function watched(options: { readonly slack?: ReturnType<typeof fakeSlack> 
     },
     /** A moment so many minutes on, as the console writes one. */
     moment: (minutes: number) => new Date(at.getTime() + minutes * MINUTE).toISOString(),
-    stands: (state: string, was: string, more: Record<string, unknown> = {}) =>
+    stands: (
+      state: string,
+      was: string,
+      more: Record<string, unknown> = {},
+      whom: readonly Told[] = MANAGER,
+    ) =>
       onOwnWork(made.hook, {
-        ...event("agent.state_changed", { login: "bot-runner", state, was, ...more }),
+        ...event("agent.state_changed", { login: "bot-runner", state, was, ...more }, whom),
         at: at.toISOString(),
       }),
     look: () => unheard.run(made.hook),
@@ -458,10 +634,10 @@ describe("an agent account unheard", () => {
     await look();
     expect(toWhom(slack)).toEqual([]);
     expect(ctx.all("waiting").map((record) => record.data)).toMatchObject([
-      { personId: MINSU.id, kind: "agents", what: { title: "Runner", to: "unheard" } },
+      { personId: MINSU.id, kind: "agent", what: { title: "Runner", to: "unheard" } },
     ]);
     expect(String(ctx.all("waiting")[0]?.data.text)).toContain("머신이 켜져 있고");
-    await notify.run(ctx, { cadence: "now", off: ["agents"] });
+    await notify.run(ctx, { cadence: "now", off: ["agent"] });
     await stands("running", "unheard");
     after(10);
     await look();
@@ -505,25 +681,46 @@ describe("an agent account unheard", () => {
     expect(silences()).toHaveLength(1);
   });
 
-  it("puts away the silence of an account that reports to nobody", async () => {
-    const slack = fakeSlack();
-    let at = NOW;
-    const made = setup({
-      slack,
-      now: () => at,
-      people: [MINSU, { ...HANA, id: RUNNER, login: "bot-runner", name: "Runner" }],
-    });
-    await connected(made.ctx);
-    await linked(made.ctx, MINSU, "U0MINSU01");
-    const hook = made.ctx.as(CONSOLE);
-    await onOwnWork(
-      hook,
-      event("agent.state_changed", { login: "bot-runner", state: "unheard", was: "running" }),
-    );
-    at = new Date(at.getTime() + 30 * MINUTE);
-    await unheard.run(hook);
-    expect(toWhom(slack)).toEqual([]);
-    expect(made.ctx.all("silences").every((record) => record.archivedAt !== null)).toBe(true);
+  it("tells whom the console told when the silence began and when it ended, and nobody where it told nobody", async () => {
+    const { slack, ctx, after, stands, look, silences } = await watched();
+    // The console told Jihye of the silence, and Minsu, whom the account reports to since, of its end.
+    await stands("unheard", "running", {}, [told(JIHYE, "agent")]);
+    expect(silences()[0]?.data.tell).toEqual([JIHYE.id]);
+    after(30);
+    await look();
+    expect(toWhom(slack)).toEqual(["U0JIHYE01"]);
+    await stands("running", "unheard");
+    after(10);
+    await look();
+    expect(toWhom(slack)).toEqual(["U0JIHYE01", "U0MINSU01"]);
+    expect(silences()).toEqual([]);
+    // Nobody told, their manager having the kind off in the console or being an agent account
+    // the console woke: counted as told, and nothing sent.
+    await stands("unheard", "running", {}, [told(MINSU, "agent", { woken: true })]);
+    after(30);
+    await look();
+    expect(silences()[0]?.data).toMatchObject({ tell: [] });
+    expect(silences()[0]?.data.toldAt).not.toBeNull();
+    await stands("running", "unheard", {}, []);
+    after(10);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(silences()).toEqual([]);
+    // An account that left since is put away when its silence comes due, and nobody told.
+    await ctx
+      .as(CONSOLE)
+      .records("silences")
+      .create({
+        personId: "0199a000-0000-7000-8000-0000000000ff",
+        since: NOW.toISOString(),
+        toldAt: null,
+        backAt: null,
+        tell: [MINSU.id],
+      });
+    after(600);
+    await look();
+    expect(toWhom(slack)).toHaveLength(2);
+    expect(silences()).toEqual([]);
   });
 });
 
@@ -680,7 +877,7 @@ describe("an agent account stopped by its usage limit", () => {
     expect(limits()).toEqual([]);
     await stands("running", "stopped");
     expect(toWhom(slack)).toHaveLength(3);
-    // A console of before the word says the account crashed, and no moment: said as a failure is.
+    // A reason that is no usage limit, and no moment: said as a failure is.
     await stands("failed", "running", { detail: "crashed" });
     expect(toWhom(slack)).toHaveLength(4);
     const failed = blocksOf(slack.of("chat.postMessage")[3]);
@@ -706,15 +903,17 @@ describe("an agent account stopped by its usage limit", () => {
     }
     const { slack, ctx, hook, moment, stands, limits } = await watched();
     // A name that is markup rings nobody, beside a moment that is Slack's own.
-    const once = {
-      ...event("agent.state_changed", {
+    const once = event(
+      "agent.state_changed",
+      {
         login: "bot-runner",
         handle: "<!channel>",
         state: "failed",
         was: "running",
         ...limit(moment(300)),
-      }),
-    };
+      },
+      MANAGER,
+    );
     await onOwnWork(hook, once);
     await onOwnWork(hook, { ...once, attempt: 2 });
     expect(toWhom(slack)).toHaveLength(1);
@@ -743,7 +942,7 @@ describe("an agent account stopped by its usage limit", () => {
     await stands("failed", "running", limit(until));
     expect(toWhom(slack)).toEqual([]);
     expect(ctx.all("waiting").map((record) => record.data)).toMatchObject([
-      { personId: MINSU.id, kind: "agents", what: { title: "Runner", to: "usage_limit", until } },
+      { personId: MINSU.id, kind: "agent", what: { title: "Runner", to: "usage_limit", until } },
     ]);
     expect(String(ctx.all("waiting")[0]?.data.text)).toContain("2026-11-09 15:00 (Asia/Seoul)");
     after(60);
@@ -752,14 +951,14 @@ describe("an agent account stopped by its usage limit", () => {
       `${RESETS} <!date^${Date.parse(until) / 1000}^`,
     );
     // The kind turned off: counted as told, so that turning it on again brings nothing old.
-    await notify.run(ctx, { cadence: "now", off: ["agents"] });
+    await notify.run(ctx, { cadence: "now", off: ["agent"] });
     await stands("running", "failed");
     after(10);
     await look();
     expect(limits()).toEqual([]);
     await stands("failed", "running", limit(moment(300)));
     expect(limits()).toHaveLength(1);
-    await notify.run(ctx, { on: ["agents"] });
+    await notify.run(ctx, { on: ["agent"] });
     await stands("unheard", "failed");
     await stands("failed", "unheard", limit(moment(300)));
     expect(slack.of("chat.postMessage")).toHaveLength(1);
@@ -774,12 +973,11 @@ describe("an agent account stopped by its usage limit", () => {
           : { ok: true, channel: { id: `D0${params.users}` } },
     });
     const { ctx, hook, after, moment, stands, look, limits } = await watched({ slack });
-    const once = event("agent.state_changed", {
-      login: "bot-runner",
-      state: "failed",
-      was: "running",
-      ...limit(moment(300)),
-    });
+    const once = event(
+      "agent.state_changed",
+      { login: "bot-runner", state: "failed", was: "running", ...limit(moment(300)) },
+      MANAGER,
+    );
     await expect(onOwnWork(hook, once)).rejects.toBeDefined();
     // Kept once its manager was told: the try after tells them.
     expect(limits()).toEqual([]);
@@ -806,39 +1004,35 @@ describe("an agent account stopped by its usage limit", () => {
     expect(slack.of("chat.postMessage")).toHaveLength(2);
   });
 
-  it("puts away the limit of an account that reports to nobody", async () => {
-    const slack = fakeSlack();
-    let at = NOW;
-    const made = setup({
-      slack,
-      now: () => at,
-      people: [MINSU, { ...HANA, id: RUNNER, login: "bot-runner", name: "Runner" }],
-    });
-    await connected(made.ctx);
-    await linked(made.ctx, MINSU, "U0MINSU01");
-    const hook = made.ctx.as(CONSOLE);
-    // Nobody to tell: nothing is kept of its limit.
-    await onOwnWork(
-      hook,
-      event("agent.state_changed", {
-        login: "bot-runner",
-        state: "failed",
-        was: "running",
-        ...limit(),
-      }),
-    );
-    expect(made.ctx.all("limits")).toEqual([]);
-    // One whose manager left it since: put away when its return comes due.
-    await hook.records("limits").create({
-      personId: RUNNER,
-      since: NOW.toISOString(),
-      until: null,
-      backAt: NOW.toISOString(),
-    });
-    at = new Date(at.getTime() + 10 * MINUTE);
-    await unheard.run(hook);
+  it("keeps a limit the console told nobody of, tells nobody of its return, and puts away an account that left", async () => {
+    const { slack, ctx, after, moment, stands, look, limits } = await watched();
+    // The manager has the kind off in the console: the limit stands all the same.
+    await stands("failed", "running", limit(moment(300)), []);
     expect(toWhom(slack)).toEqual([]);
-    expect(made.ctx.all("limits").every((record) => record.archivedAt !== null)).toBe(true);
+    expect(limits()).toHaveLength(1);
+    // They turn it on meanwhile: the same limit said again is the one that stands, and no news.
+    await stands("failed", "running", limit(moment(300)));
+    expect(toWhom(slack)).toEqual([]);
+    await stands("running", "failed", {}, []);
+    after(10);
+    await look();
+    expect(toWhom(slack)).toEqual([]);
+    expect(limits()).toEqual([]);
+    // An account that left since is put away when its return comes due, and nobody told.
+    await ctx
+      .as(CONSOLE)
+      .records("limits")
+      .create({
+        personId: "0199a000-0000-7000-8000-0000000000ff",
+        since: NOW.toISOString(),
+        until: null,
+        backAt: NOW.toISOString(),
+        tell: [MINSU.id],
+      });
+    after(10);
+    await look();
+    expect(toWhom(slack)).toEqual([]);
+    expect(limits()).toEqual([]);
   });
 });
 
@@ -847,8 +1041,11 @@ describe("the message of the day", () => {
     const { hook, slack, ctx } = await ready();
     // 01:00 UTC is 10:00 in Seoul.
     await notify.run(ctx, { cadence: "daily", at: "11:30" });
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }));
-    await onOwnWork(hook, event("task.moved", { taskId: task().id, number: 12, to: "done" }));
+    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }, BOTH));
+    await onOwnWork(
+      hook,
+      event("task.moved", { taskId: task().id, number: 12, to: "done" }, [told(JIHYE, "moved")]),
+    );
     expect(toWhom(slack)).toEqual(["U0JIHYE01", "U0JIHYE01"]);
     expect(ctx.all("waiting").map((record) => record.data.personId)).toEqual([MINSU.id]);
     expect(((await notices.run(ctx, {})) as NoticesView).waiting).toBe(1);
@@ -859,7 +1056,10 @@ describe("the message of the day", () => {
     expect(toWhom(slack)).toHaveLength(3);
     expect(blocksOf(slack.of("chat.postMessage").at(-1))).toContain("오늘의 알림 1건");
     expect(ctx.all("waiting").every((record) => record.archivedAt !== null)).toBe(true);
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }));
+    await onOwnWork(
+      hook,
+      event("task.created", { taskId: task().id, number: 12 }, [told(MINSU, "assigned")]),
+    );
     await day.run(hook);
     // Once a day: the next line waits for tomorrow.
     expect(toWhom(slack).filter((who) => who === "U0MINSU01")).toHaveLength(1);
@@ -883,29 +1083,33 @@ describe("the message of the day", () => {
       now: () => at,
       tasks: (number) => ({ title: titles[number], owner: brief(MINSU), workers: [] }),
     });
-    await notify.run(ctx, { cadence: "daily", at: "11:30", on: ["changed", "archived"] });
-    const tell = async (kind: string, data: Record<string, unknown>) => {
+    await notify.run(ctx, { cadence: "daily", at: "11:30" });
+    const tell = async (kind: string, data: Record<string, unknown>, under: string) => {
       at = new Date(at.getTime() + 60_000);
-      await onOwnWork(hook, event(kind, data));
+      await onOwnWork(hook, event(kind, data, [told(MINSU, under)]));
     };
     // Task 12 as an agent works one in a day: given, taken, given again, put up for a look.
-    await tell("task.created", { number: 12 });
-    await tell("task.moved", { number: 12, from: "ready", to: "in_progress" });
-    await tell("task.updated", { number: 12, fields: ["workers"], workersAdded: [MINSU.id] });
-    await tell("task.moved", { number: 12, from: "in_progress", to: "in_review" });
+    await tell("task.created", { number: 12 }, "assigned");
+    await tell("task.moved", { number: 12, from: "ready", to: "in_progress" }, "moved");
+    await tell(
+      "task.updated",
+      { number: 12, fields: ["workers"], workersAdded: [MINSU.id] },
+      "assigned",
+    );
+    await tell("task.moved", { number: 12, from: "in_progress", to: "in_review" }, "moved");
     // Task 13 commented twice and changed between; task 14 put away; a decision raised last.
-    await tell("task.commented", { number: 13, excerpt: "First thoughts" });
-    await tell("task.updated", { number: 13, fields: ["title", "dueOn"] });
-    await tell("task.commented", { number: 13, excerpt: "Second thoughts" });
-    await tell("task.archived", { number: 14 });
-    await tell("decision.raised", { decisionId: DECISION, question: "Ship it?" });
+    await tell("task.commented", { number: 13, excerpt: "First thoughts" }, "commented");
+    await tell("task.updated", { number: 13, fields: ["title", "dueOn"] }, "changed");
+    await tell("task.commented", { number: 13, excerpt: "Second thoughts" }, "commented");
+    await tell("task.archived", { number: 14 }, "archived");
+    await tell("decision.raised", { decisionId: DECISION, question: "Ship it?" }, "decision");
     expect(ctx.all("waiting")).toHaveLength(9);
     at = new Date(NOW.getTime() + 2 * 3_600_000); // 12:00 in Seoul
     await day.run(hook);
     const sent = slack.of("chat.postMessage").at(-1);
     expect(sectionsOf(sent)).toEqual([
       "*오늘의 알림 4건*",
-      `*나를 기다리는 결정* · Park Hana\n<https://console.example.test/decisions/${DECISION}|Ship it?>`,
+      `*내 답을 기다리는 결정* · Park Hana\n<https://console.example.test/decisions/${DECISION}|Ship it?>`,
       `*새로 맡은 작업 · 준비 → 진행 중 → 검토 중* · Park Hana\n<${WEB}/12|WEB-12 Ship the page>`,
       `*보관된 작업* · Park Hana\n<${WEB}/14|WEB-14 Fix the build>`,
       `*제목, 마감일 변경 · 새 댓글 2건* · Park Hana\n<${WEB}/13|WEB-13 Write the guide>\n> First thoughts\n> Second thoughts`,
@@ -923,7 +1127,10 @@ describe("the message of the day", () => {
     await notify.run(ctx, { cadence: "daily", at: "11:30" });
     for (let number = 1; number <= 23; number += 1) {
       at = new Date(at.getTime() + 1000);
-      await onOwnWork(hook, event("task.commented", { number, excerpt: "가".repeat(300) }));
+      await onOwnWork(
+        hook,
+        event("task.commented", { number, excerpt: "가".repeat(300) }, [told(MINSU, "commented")]),
+      );
     }
     at = new Date(NOW.getTime() + 2 * 3_600_000);
     await day.run(hook);
@@ -949,7 +1156,12 @@ describe("the message of the day", () => {
       tasks: () => ({ title: rocket.repeat(400), owner: brief(MINSU), workers: [] }),
     });
     await notify.run(ctx, { cadence: "daily", at: "11:30" });
-    await onOwnWork(hook, event("task.commented", { number: 12, excerpt: party.repeat(400) }));
+    await onOwnWork(
+      hook,
+      event("task.commented", { number: 12, excerpt: party.repeat(400) }, [
+        told(MINSU, "commented"),
+      ]),
+    );
     // Held to a count of characters, which a record's schema counts in units, two to each of these.
     expect(ctx.all("waiting")).toHaveLength(1);
     at = new Date(NOW.getTime() + 2 * 3_600_000);
@@ -973,7 +1185,7 @@ describe("the message of the day", () => {
       },
       { owner: MINSU.id },
     );
-    await onOwnWork(hook, event("task.created", { number: 12 }));
+    await onOwnWork(hook, event("task.created", { number: 12 }, [told(MINSU, "assigned")]));
     at = new Date(NOW.getTime() + 2 * 3_600_000);
     await day.run(hook);
     expect(sectionsOf(slack.of("chat.postMessage").at(-1))).toEqual([
@@ -990,7 +1202,7 @@ describe("the message of the day", () => {
     const { hook, slack, ctx } = await ready({ now: () => at });
     // Chosen at 10:00 in Seoul for 11:30.
     await notify.run(ctx, { cadence: "daily", at: "11:30" });
-    await onOwnWork(hook, event("task.created", { number: 12 }));
+    await onOwnWork(hook, event("task.created", { number: 12 }, [told(MINSU, "assigned")]));
     const kept = () => JSON.stringify([ctx.all("preferences"), ctx.all("waiting")]);
     const before = kept();
     const calls = slack.calls.length;
@@ -1022,7 +1234,10 @@ describe("the day due", () => {
     const toMinsu = () => toWhom(slack).filter((who) => who === "U0MINSU01").length;
     // Chosen at 10:00 in Seoul for 23:45: today's time has not come, and no run of the job is at it.
     await notify.run(ctx, { cadence: "daily", at: "23:45" });
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }));
+    await onOwnWork(
+      hook,
+      event("task.created", { taskId: task().id, number: 12 }, [told(MINSU, "assigned")]),
+    );
     at = hours(13.5); // 23:30
     await day.run(hook);
     expect(toMinsu()).toBe(0);
@@ -1035,7 +1250,10 @@ describe("the day due", () => {
     expect(ctx.all("preferences")[0]?.data.sentOn).toBe("2026-11-10");
     // So a line kept the next afternoon waits for that night's time.
     at = hours(44); // 15:00
-    await onOwnWork(hook, event("task.created", { taskId: task().id, number: 12 }));
+    await onOwnWork(
+      hook,
+      event("task.created", { taskId: task().id, number: 12 }, [told(MINSU, "assigned")]),
+    );
     await day.run(hook);
     expect(toMinsu()).toBe(1);
     at = hours(62.25); // 00:15 the day after
@@ -1062,7 +1280,7 @@ describe("a delivery tried again", () => {
     await linked(made.ctx, MINSU, "U0MINSU01");
     await linked(made.ctx, JIHYE, "U0JIHYE01");
     const hook = made.ctx.as(CONSOLE);
-    const once = event("task.created", { taskId: task().id, number: 12 });
+    const once = event("task.created", { taskId: task().id, number: 12 }, BOTH);
     await expect(onOwnWork(hook, once)).rejects.toBeDefined();
     const failed = made.ctx.all("deliveries")[0]?.data as { outcome: string; told: string[] };
     expect(failed.outcome).toBe("failed");
@@ -1078,40 +1296,62 @@ describe("a delivery tried again", () => {
   });
 });
 
+describe("the kinds", () => {
+  it("are the console's own, each by its name and in its order", () => {
+    // What the console tells a member under is what they choose by here: a kind it adds is one
+    // the messenger has no words for until this list has it.
+    expect([...NOTICE_KINDS]).toEqual([...NOTIFICATION_KINDS]);
+  });
+});
+
 describe("notify and notices", () => {
-  it("answers the defaults to whoever never chose, and what they chose since", async () => {
+  it("answers everything the console tells to whoever never chose, and what they keep out of Slack since", async () => {
     const { ctx } = await ready();
     const before = (await notices.run(ctx, {})) as NoticesView;
     expect(before).toMatchObject({
       chosen: false,
       cadence: "now",
       at: "09:00",
-      ownAgents: false,
       timeZone: "Asia/Seoul",
       accounts: [{ teamId: TEAM, teamName: "Acme" }],
     });
+    // The console's kinds by its own names, and the tasks turned on beside them: all sent on.
     expect(before.kinds).toEqual({
       assigned: true,
+      ready: true,
       moved: true,
-      changed: false,
+      changed: true,
       commented: true,
-      archived: false,
-      decisions: true,
-      agents: true,
+      archived: true,
+      decision: true,
+      answered: true,
+      agent: true,
+      followed: true,
     });
-    const said = await notify.run(ctx, {
-      off: ["moved"],
-      on: ["archived"],
-      mute: [{ id: PROJECT.id, key: PROJECT.key, name: "Web" }],
-    });
-    expect(said.text).toContain("나에게 맡겨진 작업");
+    const said = await notify.run(ctx, { off: ["followed", "moved"] });
+    // The answer reads back what is kept out, for an agent that chose it.
+    expect(said.text).toBe(
+      "콘솔이 알려 주는 것을 Slack으로 그때그때 보냅니다. Slack으로 보내지 않는 것: 상태 변경, 알림을 켠 작업.",
+    );
     const after = (await notices.run(ctx, {})) as NoticesView;
-    expect(after.kinds.moved).toBe(false);
-    expect(after.kinds.archived).toBe(true);
-    expect(after.mutedProjects).toEqual([{ id: PROJECT.id, key: "WEB", name: "Web" }]);
-    expect(ctx.all("preferences")[0]?.data.personId).toBe(MINSU.id);
-    await notify.run(ctx, { reset: true });
-    expect(((await notices.run(ctx, {})) as NoticesView).kinds.moved).toBe(true);
+    expect(after).toMatchObject({ chosen: true, kinds: { moved: false, followed: false } });
+    expect(after.kinds.commented).toBe(true);
+    // The record keeps what is off and nothing of who is told, which is the console's.
+    expect(ctx.all("preferences")[0]?.data).toEqual({
+      personId: MINSU.id,
+      off: ["moved", "followed"],
+      cadence: "now",
+      at: "09:00",
+      sentOn: null,
+    });
+    await notify.run(ctx, { on: ["moved"] });
+    expect(((await notices.run(ctx, {})) as NoticesView).kinds).toMatchObject({
+      moved: true,
+      followed: false,
+    });
+    const reset = await notify.run(ctx, { reset: true });
+    expect(reset.text).toContain("Slack으로 보내지 않는 것: 없음.");
+    expect(((await notices.run(ctx, {})) as NoticesView).kinds.followed).toBe(true);
   });
 
   it("refuses a time that is none, a kind both on and off, the console itself, and whoever holds no role", async () => {
@@ -1126,15 +1366,120 @@ describe("notify and notices", () => {
     await expect(notices.run(ctx.as(STRANGER), {})).rejects.toMatchObject({ code: "forbidden" });
   });
 
-  it("says which workspace a project is told in, and whether the reader is told of it", async () => {
+  it("says which workspace a project is told in, to a member and never to the console itself", async () => {
     const { ctx } = await ready();
     const project = { id: PROJECT.id, key: PROJECT.key, name: "Web" };
     const view = (await projectNotices.run(ctx, { key: project })) as ProjectNoticesView;
-    expect(view).toMatchObject({
+    expect(view).toEqual({
+      project,
       workspace: { teamId: TEAM, teamName: "Acme", default: true },
-      muted: false,
+      workspaces: [{ teamId: TEAM, teamName: "Acme" }],
       keeper: false,
     });
+    await expect(projectNotices.run(ctx.as(CONSOLE), { key: project })).rejects.toMatchObject({
+      code: "no_person",
+    });
+  });
+});
+
+describe("a choice kept before data version 4", () => {
+  /** A collection as it is kept, whatever shape its records had. */
+  const loose = (name: string) => defineCollection(name, { schema: z.looseObject({}) });
+  /** What 0.6 kept of Minsu: every kind on or off, a project turned off, their own agents counted. */
+  const before = {
+    personId: MINSU.id,
+    kinds: {
+      assigned: true,
+      moved: false,
+      changed: false,
+      commented: true,
+      archived: false,
+      decisions: false,
+      agents: true,
+    },
+    mutedProjects: [PROJECT.id],
+    cadence: "daily",
+    at: "08:30",
+    ownAgents: true,
+    sentOn: "2026-11-08",
+  };
+
+  it("is read as it stands: what they turned off stays off, and the rest follows the console", async () => {
+    const { ctx, hook, slack } = await ready();
+    await ctx.records(loose("preferences")).create(before, { owner: MINSU.id });
+    const view = (await notices.run(ctx, {})) as NoticesView;
+    // Moves and decisions they turned off themselves; changes and tasks put away were off for
+    // whoever never chose, and are no choice of theirs.
+    expect(view).toMatchObject({ chosen: true, cadence: "daily", at: "08:30" });
+    expect(view.kinds).toMatchObject({
+      moved: false,
+      decision: false,
+      changed: true,
+      archived: true,
+      ready: true,
+      agent: true,
+      followed: true,
+    });
+    await onOwnWork(hook, event("task.moved", { number: 12, to: "done" }, [told(MINSU, "moved")]));
+    expect(ctx.all("waiting")).toHaveLength(0);
+    // A choice made since brings the record to the shape of now, what was off still off.
+    await notify.run(ctx, { cadence: "now" });
+    expect(ctx.all("preferences")[0]?.data).toEqual({
+      personId: MINSU.id,
+      off: ["moved", "decision"],
+      cadence: "now",
+      at: "08:30",
+      sentOn: "2026-11-08",
+    });
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  it("is brought to the shape of now by the upgrade, once, with the lines waiting for a day's message", async () => {
+    const { ctx, hook } = await ready();
+    await ctx.records(loose("preferences")).create(before, { owner: MINSU.id });
+    const line = (kind: string) =>
+      ctx.records(loose("waiting")).create(
+        {
+          personId: MINSU.id,
+          kind,
+          text: "A line",
+          url: null,
+          at: NOW.toISOString(),
+          what: {
+            ref: null,
+            title: "Runner",
+            actor: null,
+            from: null,
+            to: "failed",
+            fields: [],
+            excerpt: "",
+          },
+        },
+        { owner: MINSU.id },
+      );
+    await line("agents");
+    await line("decisions");
+    await line("commented");
+    await line("everything");
+    for (let run = 0; run < 2; run += 1) {
+      await toVersion4(hook);
+      expect(ctx.all("preferences").map((record) => record.data)).toEqual([
+        {
+          personId: MINSU.id,
+          off: ["moved", "decision"],
+          cadence: "daily",
+          at: "08:30",
+          sentOn: "2026-11-08",
+        },
+      ]);
+      // Each line by the console's name for its kind; one of no kind is put away.
+      expect(
+        ctx
+          .all("waiting")
+          .filter((record) => record.archivedAt === null)
+          .map((record) => record.data.kind),
+      ).toEqual(["agent", "decision", "commented"]);
+    }
   });
 });
 
@@ -1150,14 +1495,25 @@ describe("the button of a message", () => {
     };
     await slackEndpoint.run(ctx, signedRequest(press));
     expect(((await notices.run(ctx, {})) as NoticesView).kinds.commented).toBe(false);
-    const told = slack.of("response_url")[0]?.json as { text: string; response_type: string };
-    expect(told.response_type).toBe("ephemeral");
-    expect(told.text).toContain("내 작업의 댓글");
+    const said = slack.of("response_url")[0]?.json as { text: string; response_type: string };
+    expect(said.response_type).toBe("ephemeral");
+    // Off for Slack alone, which the words say: the console's own list still has it.
+    expect(said.text).toContain("이제 댓글 알림을 Slack으로 보내지 않습니다.");
     // A value that is no kind changes nothing and says nothing.
     await slackEndpoint.run(
       ctx,
       signedRequest({ ...press, actions: [{ action_id: "notice-off", value: "everything" }] }),
     );
     expect(slack.of("response_url")).toHaveLength(1);
+    // A message sent before data version 4 names its kind as it was called then.
+    await slackEndpoint.run(
+      ctx,
+      signedRequest({ ...press, actions: [{ action_id: "notice-off", value: "agents" }] }),
+    );
+    expect(((await notices.run(ctx, {})) as NoticesView).kinds).toMatchObject({
+      agent: false,
+      commented: false,
+      moved: true,
+    });
   });
 });

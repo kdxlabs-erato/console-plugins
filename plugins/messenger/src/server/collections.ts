@@ -24,6 +24,8 @@ export const slackId = z.string().regex(/^[A-Z][A-Z0-9]{2,40}$/);
 export const WORKSPACES_AT_MOST = 50;
 /** The most installation links good at once. */
 export const INSTALLS_AT_MOST = 20;
+/** The most members one event is sent on to, of those the console told of it. */
+export const TOLD_AT_MOST = 100;
 
 /** An installation link given out: the state Slack carries back, until when it is good, and who asked. */
 const install = z.object({
@@ -181,7 +183,7 @@ export const deliveries = defineCollection("deliveries", {
     outcome: z.enum(["sent", "skipped", "failed"]),
     note: z.string().max(300),
     /** Whom an event was told to already, as `<person>:<kind>`, so that a retry tells nobody twice. */
-    told: z.array(z.string().max(100)).max(100).optional(),
+    told: z.array(z.string().max(100)).max(TOLD_AT_MOST).optional(),
     attempt: z.number().int().min(1).max(100),
     at: instant,
   }),
@@ -192,22 +194,23 @@ export const deliveries = defineCollection("deliveries", {
 });
 
 /**
- * What a person chose to be told of their own work (ADR-0015), one record each, theirs: the kinds,
- * the projects told nothing of, at once or once a day and when, and whether their own agents count.
+ * What a member chose of what reaches them in Slack (ADR-0017), one record each, theirs: of what
+ * the console tells them, what is not sent on, and at once or once a day and when. Who is told of
+ * what, a project turned off and whether their own agents count are the console's to keep, and
+ * none of them is here.
  */
 export const preferences = defineCollection("preferences", {
   schema: z.object({
     personId: id,
-    kinds: z.object(
-      Object.fromEntries(NOTICE_KINDS.map((kind) => [kind, z.boolean()])) as {
-        [K in (typeof NOTICE_KINDS)[number]]: z.ZodBoolean;
-      },
-    ),
-    mutedProjects: z.array(id).max(200),
+    /**
+     * What is not sent on to Slack: kinds of the console's notifications, by its names, and
+     * `followed` for the tasks they turned on themselves. Words and no enumeration, so that a
+     * record outlives a kind the console drops; what is no choice is read past.
+     */
+    off: z.array(z.string().min(1).max(40)).max(40),
     cadence: z.enum(CADENCES),
     /** The time of the day's message, in the workspace's zone. */
     at: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
-    ownAgents: z.boolean(),
     /** The day the last day's message went, in the workspace's zone. */
     sentOn: z
       .string()
@@ -236,7 +239,7 @@ const happened = z.object({
   from: z.string().max(40).nullable(),
   to: z.string().max(40).nullable(),
   /** What a change changed of the task. */
-  fields: z.array(z.string().max(40)).max(8),
+  fields: z.array(z.string().max(40)).max(12),
   /** A comment's words, or what an agent account's state says of itself. */
   excerpt: z.string().max(200),
   /**
@@ -250,6 +253,7 @@ const happened = z.object({
 export const waiting = defineCollection("waiting", {
   schema: z.object({
     personId: id,
+    /** What happened, by the console's kind of notification it is told as. */
     kind: z.enum(NOTICE_KINDS),
     /** The line in one sentence, in the person's language, and where it leads on the console. */
     text: z.string().min(1).max(600),
@@ -285,6 +289,11 @@ export const silences = defineCollection("silences", {
     toldAt: instant.nullable(),
     /** When the account was heard from again after its manager was told; none while it is silent. */
     backAt: instant.nullable(),
+    /**
+     * Whom the job tells next: those the console told of the event that began the silence, or of
+     * the one that ended it, the ones it woke itself left out. Taken off as each is told.
+     */
+    tell: z.array(id).max(TOLD_AT_MOST),
   }),
   indexes: ["personId"],
   read: [ROLE],
@@ -312,6 +321,8 @@ export const limits = defineCollection("limits", {
     until: instant.nullable(),
     /** When the account ran again; none while the limit stops it, or while it is unheard. */
     backAt: instant.nullable(),
+    /** Whom the job tells of the return: those the console told of the account running again. */
+    tell: z.array(id).max(TOLD_AT_MOST),
   }),
   indexes: ["personId"],
   read: [ROLE],

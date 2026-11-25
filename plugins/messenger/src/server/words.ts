@@ -5,7 +5,7 @@
 // sentence that carries a name takes its particle from the console's helpers, as the console's
 // own Korean does.
 import { asObject, asSubject, asWay } from "@skillcdn/console/plugin";
-import type { Language, NoticeKind } from "../shared/contracts.js";
+import type { Language, NoticeChoice } from "../shared/contracts.js";
 
 /** The parts of a day as hr spells them, in the words a message says them in. */
 export type PartWord = "none" | "am" | "pm" | "q1" | "q2" | "q3" | "q4";
@@ -183,9 +183,10 @@ export interface ServerWords {
   readonly days: (count: string) => string;
   readonly parts: Readonly<Record<PartWord, string>>;
   readonly decisions: string;
-  /** What a person is told of their own work, in a direct message (ADR-0015). */
+  /** What the console told a member of, sent on in a direct message (ADR-0017). */
   readonly notice: {
-    readonly kinds: Readonly<Record<NoticeKind, string>>;
+    /** What a member turns off for Slack, as a button and a sentence name it. */
+    readonly kinds: Readonly<Record<NoticeChoice, string>>;
     readonly nothing: string;
     readonly now: string;
     readonly daily: (at: string) => string;
@@ -195,11 +196,15 @@ export interface ServerWords {
      */
     readonly facts: {
       readonly assigned: string;
+      readonly ready: string;
       readonly changed: (what: string) => string;
+      /** A change of which the words name no field. */
+      readonly changedSome: string;
       readonly commented: string;
       readonly comments: (count: string) => string;
       readonly archived: string;
       readonly decision: string;
+      readonly answered: string;
       readonly agent: (state: string) => string;
     };
     /** Who did it, where more than two did. */
@@ -295,7 +300,8 @@ const EN: ServerWords = {
       isDefault
         ? `${name} is the default workspace, told of every project no other names, and of ${projects} named here.`
         : `${name} is told of ${projects} projects named here.`,
-    notices: (kinds, when) => `You are told of ${kinds}, ${when}.`,
+    notices: (out, when) =>
+      `What the console tells you reaches you in Slack ${when}. Kept out of Slack: ${out}.`,
     accepted: (name) => `${name} is accepted: its people are matched within the hour.`,
     names: (app, bot, handle) =>
       `In Slack the app is "${app}" and its bot "${bot}"${handle === null ? "" : `, @${handle}`}.`,
@@ -453,31 +459,43 @@ const EN: ServerWords = {
   notice: {
     kinds: {
       assigned: "tasks given to you",
+      ready: "tasks ready to begin",
       moved: "your tasks moved",
       changed: "your tasks changed",
       commented: "comments on your tasks",
       archived: "your tasks put away",
-      decisions: "decisions waiting on you",
-      agents: "your agent accounts",
+      decision: "decisions waiting for your answer",
+      answered: "answers to your questions",
+      agent: "your agent accounts",
+      followed: "tasks you turned on",
     },
     nothing: "nothing",
     now: "as it happens",
     daily: (at) => `in one message a day at ${at}`,
     facts: {
       assigned: "Given to you",
+      ready: "Ready to begin",
       changed: (what) => `Changed: ${what}`,
+      changedSome: "Changed",
       commented: "New comment",
       comments: (count) => `${count} new comments`,
       archived: "Put away",
-      decision: "A decision waits on you",
+      decision: "A decision waits for your answer",
+      answered: "Your question was answered",
       agent: (state) => `Your agent account ${state}`,
     },
     others: (name, count) => `${name} and ${count} more`,
     fields: {
       title: "the title",
       body: "the description",
+      priority: "the priority",
+      parentId: "the parent task",
+      workers: "the workers",
+      category: "the category",
+      goalId: "the goal",
       startsOn: "the start",
       dueOn: "the due day",
+      links: "the links",
     },
     states: {
       idea: "Idea",
@@ -505,9 +523,10 @@ const EN: ServerWords = {
       moment: "{date_short_pretty} at {time}",
     },
     open: "Open on the console",
-    choose: "Choose what you are told",
+    choose: "Choose what reaches you in Slack",
     turnOff: (kind) => `Turn off ${kind}`,
-    turnedOff: (kind, page) => `You are told nothing more of ${kind}. ${page}`,
+    turnedOff: (kind, page) =>
+      `Slack sends you nothing more of ${kind}; the console's own list still has it. ${page}`,
     dayTitle: (count) => `Your day: ${count}`,
     more: (count) => `And ${count} more on the console.`,
   },
@@ -580,7 +599,8 @@ const KO: ServerWords = {
       isDefault
         ? `${asSubject(name)} 기본 워크스페이스입니다. 다른 곳에 정하지 않은 모든 프로젝트와, 여기에 정한 프로젝트 ${projects}개를 알립니다.`
         : `${name}에는 여기에 정한 프로젝트 ${projects}개를 알립니다.`,
-    notices: (kinds, when) => `${asObject(kinds)} ${when} 알려 드립니다.`,
+    notices: (out, when) =>
+      `콘솔이 알려 주는 것을 Slack으로 ${when} 보냅니다. Slack으로 보내지 않는 것: ${out}.`,
     accepted: (name) =>
       `${asObject(name)} 수락했습니다. 한 시간 안에 그곳 사람들의 계정을 연결합니다.`,
     names: (app, bot, handle) =>
@@ -741,28 +761,45 @@ const KO: ServerWords = {
   decisions: "결정",
   notice: {
     kinds: {
-      assigned: "나에게 맡겨진 작업",
-      moved: "내 작업의 상태 이동",
-      changed: "내 작업의 변경",
-      commented: "내 작업의 댓글",
-      archived: "내 작업의 보관",
-      decisions: "나를 기다리는 결정",
-      agents: "내 에이전트 계정",
+      assigned: "맡겨진 작업",
+      ready: "시작할 수 있는 작업",
+      moved: "상태 변경",
+      changed: "내용 변경",
+      commented: "댓글",
+      archived: "보관된 작업",
+      decision: "내 답을 기다리는 결정",
+      answered: "내 질문의 답변",
+      agent: "내 에이전트 계정",
+      followed: "알림을 켠 작업",
     },
-    nothing: "아무것도",
+    nothing: "없음",
     now: "그때그때",
     daily: (at) => `하루 한 번 ${at}에 모아서`,
     facts: {
       assigned: "새로 맡은 작업",
+      ready: "시작할 수 있는 작업",
       changed: (what) => `${what} 변경`,
+      changedSome: "내용 변경",
       commented: "새 댓글",
       comments: (count) => `새 댓글 ${count}건`,
       archived: "보관된 작업",
-      decision: "나를 기다리는 결정",
+      decision: "내 답을 기다리는 결정",
+      answered: "내 질문에 답변",
       agent: (state) => `에이전트 계정이 ${state}`,
     },
     others: (name, count) => `${name} 외 ${count}명`,
-    fields: { title: "제목", body: "설명", startsOn: "시작일", dueOn: "마감일" },
+    fields: {
+      title: "제목",
+      body: "설명",
+      priority: "우선순위",
+      parentId: "상위 작업",
+      workers: "작업자",
+      category: "카테고리",
+      goalId: "목표",
+      startsOn: "시작일",
+      dueOn: "마감일",
+      links: "링크",
+    },
     states: {
       idea: "아이디어",
       ready: "준비",
@@ -788,9 +825,10 @@ const KO: ServerWords = {
       moment: "{date_short_pretty} {time}",
     },
     open: "콘솔에서 열기",
-    choose: "받을 알림 정하기",
+    choose: "Slack으로 받을 알림 정하기",
     turnOff: (kind) => `${kind} 알림 끄기`,
-    turnedOff: (kind, page) => `이제 ${kind} 알림을 보내지 않습니다. ${page}`,
+    turnedOff: (kind, page) =>
+      `이제 ${kind} 알림을 Slack으로 보내지 않습니다. 콘솔의 알림 목록에는 그대로 남습니다. ${page}`,
     dayTitle: (count) => `오늘의 알림 ${count}건`,
     more: (count) => `나머지 ${count}건은 콘솔에서 보세요.`,
   },

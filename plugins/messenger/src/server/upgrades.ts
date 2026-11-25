@@ -4,7 +4,17 @@
 // one again where it finds records of the shape before, so that a console that did not run it
 // still brings them on.
 import type { PluginContext, PluginRecord, UpgradeDefinition } from "@skillcdn/console/plugin";
-import { apps, connections, routes, slackId, threads } from "./collections.js";
+import { NOTICE_KINDS } from "../shared/contracts.js";
+import {
+  apps,
+  connections,
+  preferences,
+  routes,
+  slackId,
+  threads,
+  waiting,
+} from "./collections.js";
+import { offOf } from "./notices.js";
 
 /** The secret the bot's token is kept in, by workspace from data version 3. */
 const BOT_TOKEN = "slackBotToken";
@@ -171,6 +181,36 @@ export async function toVersion3(ctx: PluginContext): Promise<void> {
   }
 }
 
+/**
+ * Data version 4 (ADR-0017): who is told of what is the console's, and a member's record keeps
+ * what of it is not sent on to Slack. A record of before kept every kind on or off, the projects
+ * turned off and whether their own agents count: the kinds a member turned off themselves are
+ * kept off, by the console's names; the rest follows the console, where a project is turned off
+ * and one's own agents are counted from now on. A line waiting for a day's message names its
+ * kind as the console does. A record or a line already so is left as it is.
+ */
+export async function toVersion4(ctx: PluginContext): Promise<void> {
+  for (const record of await everyRecord(ctx, preferences.name)) {
+    if (!Array.isArray(record.data.off)) {
+      // The fields of before are no part of the collection any more, and go with the write.
+      await ctx.records(preferences.name).update(record.id, { off: offOf(record.data) });
+    }
+  }
+  const renamed: Readonly<Record<string, string>> = { decisions: "decision", agents: "agent" };
+  for (const record of await everyRecord(ctx, waiting.name)) {
+    const kind = String(record.data.kind);
+    if ((NOTICE_KINDS as readonly string[]).includes(kind)) {
+      continue;
+    }
+    const now = renamed[kind];
+    if (now === undefined) {
+      await ctx.records(waiting.name).archive(record.id);
+    } else {
+      await ctx.records(waiting.name).update(record.id, { kind: now });
+    }
+  }
+}
+
 export const upgrades: UpgradeDefinition[] = [
   {
     to: 2,
@@ -185,5 +225,11 @@ export const upgrades: UpgradeDefinition[] = [
     about:
       "The connection becomes the app and the workspace it is installed in, the default; the routes and the threads name that workspace, and the bot's token is kept under its id.",
     run: toVersion3,
+  },
+  {
+    to: 4,
+    about:
+      "A member's choice keeps what of the console's notifications is not sent on to Slack, by the console's kinds; the projects turned off and one's own agents are the console's settings now.",
+    run: toVersion4,
   },
 ];

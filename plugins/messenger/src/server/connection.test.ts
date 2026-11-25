@@ -590,7 +590,7 @@ describe("the upgrade of the records", () => {
       clientId: null,
       appName: "에이씨미",
     });
-    await upgrades.at(-1)?.run(ctx.as(CONSOLE));
+    await upgrades.find((upgrade) => upgrade.to === 3)?.run(ctx.as(CONSOLE));
     expect(app(ctx)).toMatchObject({ appId: null, appName: "에이씨미" });
     expect(ctx.all("connections").filter((record) => record.archivedAt === null)).toHaveLength(0);
     expect(kept(ctx, "routes")).toBe(0);

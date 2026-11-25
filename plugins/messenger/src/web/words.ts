@@ -8,7 +8,7 @@ import type {
   HrState,
   MatchState,
   NoteCode,
-  NoticeKind,
+  NoticeChoice,
   Outcome,
   RouteAs,
   RouteKind,
@@ -167,21 +167,21 @@ export interface Words {
     readonly choose: string;
     readonly what: string;
     readonly whatHint: string;
-    readonly kinds: Readonly<Record<NoticeKind, string>>;
+    readonly kinds: Readonly<Record<NoticeChoice, string>>;
     readonly when: string;
     readonly cadences: Readonly<Record<Cadence, string>>;
     readonly at: string;
     readonly atHint: (zone: string) => string;
-    readonly agents: string;
-    readonly ownAgents: string;
     readonly save: string;
+    /** The console's own settings, where what one is told at all is chosen. */
+    readonly console: string;
+    readonly consoleHint: string;
+    readonly openConsole: string;
     readonly where: string;
     readonly workspace: string;
     readonly nowhere: string;
     readonly whereHint: string;
     readonly waiting: (count: string) => string;
-    readonly muted: string;
-    readonly unmute: string;
     readonly defaults: string;
     readonly defaultsHint: string;
     readonly reset: string;
@@ -193,13 +193,7 @@ export interface Words {
     readonly here: string;
     readonly workspace: string;
     readonly byDefault: string;
-    readonly you: string;
-    readonly told: string;
-    readonly muted: string;
-    readonly toldHint: string;
-    readonly mutedHint: string;
-    readonly mute: string;
-    readonly unmute: string;
+    readonly hint: string;
     readonly choose: string;
     readonly chooseHint: string;
     readonly theDefault: string;
@@ -436,47 +430,50 @@ const EN: Words = {
     more: (shown, total) => `${shown} of ${total} shown.`,
   },
   notifications: {
-    title: "My notifications",
-    lead: "What you are told in Slack of your own work, and when. Your agent chooses the same with notify.",
+    title: "My Slack notifications",
+    lead: "Which of what the console tells you reaches you in Slack too, and when. Your agent chooses the same with notify.",
     noAccount: {
       title: "No Slack account of yours is matched",
       body: "None is matched in a workspace the app is in, so nothing reaches you yet: the address in Slack is the one the console knows for you.",
     },
     choose: "What, and when",
-    what: "Tell me of",
-    whatHint: "Each message has a button that turns its kind off.",
+    what: "Send to Slack",
+    whatHint:
+      "Only what the console tells you is sent: a kind that is off in the console's notification settings sends nothing, whatever stands here. Each message has a button that turns its kind off.",
     kinds: {
-      assigned: "Tasks given to me",
-      moved: "My tasks moved",
-      changed: "My tasks changed",
-      commented: "Comments on my tasks",
-      archived: "My tasks put away",
-      decisions: "Decisions waiting on me",
-      agents: "My agent accounts",
+      assigned: "Given to you",
+      ready: "Ready to begin",
+      moved: "Moved",
+      changed: "Changed",
+      commented: "Comment",
+      archived: "Put away",
+      decision: "Waits for your answer",
+      answered: "Your question was answered",
+      agent: "Your agent account",
+      followed: "Tasks you turned on",
     },
     when: "When",
     cadences: { now: "As it happens", daily: "Once a day" },
     at: "At",
     atHint: (zone) => `In the workspace's time zone, ${zone}, within a few minutes after.`,
-    agents: "My agents",
-    ownAgents: "Tell me what my own agents did for me too",
     save: "Save",
+    console: "What you are told",
+    consoleHint:
+      "The console decides what you are told at all: each kind, a project turned off, a task's bell. Turn a kind on there first; it reaches Slack too unless it is off here.",
+    openConsole: "Notification settings",
     where: "Where",
     workspace: "Workspace",
     nowhere: "Nowhere yet.",
     whereHint:
       "In a direct message, in the workspace the project is told in where you have an account there, else the default.",
     waiting: (count) => `${count} waiting for the day's message.`,
-    muted: "Projects turned off",
-    unmute: "Turn on",
     defaults: "Back to the defaults",
-    defaultsHint:
-      "Tasks given to you, your tasks moved, comments on them, decisions waiting on you and your agent accounts, as they happen.",
+    defaultsHint: "Everything the console tells you, as it happens.",
     reset: "Reset",
   },
   project: {
     title: "Messenger",
-    lead: "Where this project is told in Slack, and whether you are told of it.",
+    lead: "Where this project is told in Slack.",
     notConnected: {
       title: "Slack is not connected yet",
       body: "Once whoever keeps the messenger connects it, this page says where the project is told.",
@@ -484,13 +481,7 @@ const EN: Words = {
     here: "This project",
     workspace: "Workspace",
     byDefault: "Default",
-    you: "You",
-    told: "Told",
-    muted: "Turned off",
-    toldHint: "You are told of your own work here, as you chose on My notifications.",
-    mutedHint: "You are told nothing of this project.",
-    mute: "Turn off for me",
-    unmute: "Turn on for me",
+    hint: "What you are told of this project is the console's notification settings to say, and which of it reaches Slack is chosen on My Slack notifications.",
     choose: "Told in",
     chooseHint: "The workspace whose people work on this project.",
     theDefault: "The default workspace",
@@ -761,47 +752,50 @@ const KO: Words = {
     more: (shown, total) => `${total}명 중 ${shown}명을 보여 줍니다.`,
   },
   notifications: {
-    title: "내 알림",
-    lead: "내 일 가운데 무엇을 언제 Slack으로 받을지 정합니다. 내 에이전트도 notify로 똑같이 정할 수 있습니다.",
+    title: "내 Slack 알림",
+    lead: "콘솔이 알려 주는 것 가운데 무엇을 언제 Slack으로도 받을지 정합니다. 내 에이전트도 notify로 똑같이 정할 수 있습니다.",
     noAccount: {
       title: "연결된 내 Slack 계정이 없습니다",
       body: "앱이 설치된 워크스페이스에 내 계정이 연결되어 있지 않아 아직 아무것도 받지 못합니다. Slack의 이메일이 콘솔에 있는 내 이메일과 같아야 합니다.",
     },
     choose: "무엇을, 언제",
-    what: "알려 줄 것",
-    whatHint: "메시지마다 그 종류를 끄는 버튼이 있습니다.",
+    what: "Slack으로 받을 것",
+    whatHint:
+      "콘솔이 알려 주는 것만 보냅니다. 콘솔의 알림 설정에서 꺼 둔 종류는 여기서 켜도 오지 않습니다. 메시지마다 그 종류를 끄는 버튼이 있습니다.",
     kinds: {
-      assigned: "나에게 맡겨진 작업",
-      moved: "내 작업의 상태 이동",
-      changed: "내 작업의 변경",
-      commented: "내 작업의 댓글",
-      archived: "내 작업의 보관",
-      decisions: "나를 기다리는 결정",
-      agents: "내 에이전트 계정",
+      assigned: "나에게 맡겨짐",
+      ready: "시작할 수 있음",
+      moved: "상태 변경",
+      changed: "내용 변경",
+      commented: "댓글",
+      archived: "보관됨",
+      decision: "내 답을 기다리는 결정",
+      answered: "내 질문에 답변",
+      agent: "내 에이전트 계정",
+      followed: "알림을 켠 작업",
     },
     when: "언제",
     cadences: { now: "그때그때", daily: "하루 한 번" },
     at: "시각",
     atHint: (zone) => `워크스페이스 시간대(${zone}) 기준이며, 그 시각부터 몇 분 안에 보냅니다.`,
-    agents: "내 에이전트",
-    ownAgents: "내 에이전트가 나 대신 한 일도 알려 주기",
     save: "저장",
+    console: "알림으로 받을 것",
+    consoleHint:
+      "무엇을 알림으로 받을지는 콘솔에서 정합니다. 종류, 끈 프로젝트, 작업마다의 종이 거기에 있습니다. 거기서 먼저 켜면, 여기서 끄지 않는 한 Slack으로도 옵니다.",
+    openConsole: "알림 설정",
     where: "받는 곳",
     workspace: "워크스페이스",
     nowhere: "아직 없음.",
     whereHint:
       "DM으로 받습니다. 프로젝트를 알리는 워크스페이스에 내 계정이 있으면 그곳에서, 없으면 기본 워크스페이스에서 받습니다.",
     waiting: (count) => `하루 알림을 기다리는 것 ${count}건.`,
-    muted: "끈 프로젝트",
-    unmute: "켜기",
     defaults: "기본값으로",
-    defaultsHint:
-      "맡겨진 작업, 내 작업의 상태 이동과 댓글, 나를 기다리는 결정, 내 에이전트 계정을 그때그때 받습니다.",
+    defaultsHint: "콘솔이 알려 주는 것을 모두, 그때그때 받습니다.",
     reset: "되돌리기",
   },
   project: {
     title: "메신저",
-    lead: "이 프로젝트를 Slack의 어느 워크스페이스에 알리는지, 내가 받는지 봅니다.",
+    lead: "이 프로젝트를 Slack의 어느 워크스페이스에 알리는지 봅니다.",
     notConnected: {
       title: "아직 Slack이 연결되지 않았습니다",
       body: "메신저 담당이 Slack을 연결하면 이 프로젝트를 어디에 알리는지 여기에 보입니다.",
@@ -809,13 +803,7 @@ const KO: Words = {
     here: "이 프로젝트",
     workspace: "워크스페이스",
     byDefault: "기본",
-    you: "나",
-    told: "받음",
-    muted: "끔",
-    toldHint: "내 알림에서 고른 대로 이 프로젝트의 내 일을 받습니다.",
-    mutedHint: "이 프로젝트의 알림은 받지 않습니다.",
-    mute: "나는 끄기",
-    unmute: "나는 켜기",
+    hint: "이 프로젝트에서 무엇을 알림으로 받을지는 콘솔의 알림 설정에서, 그 가운데 Slack으로 받을 것은 내 Slack 알림에서 정합니다.",
     choose: "알리는 곳",
     chooseHint: "이 프로젝트를 하는 사람들이 쓰는 워크스페이스.",
     theDefault: "기본 워크스페이스",

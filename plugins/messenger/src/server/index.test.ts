@@ -34,11 +34,12 @@ describe("the module", () => {
     expect(design).toContain("`plugin:hr:leave-requested`");
   });
 
-  it("hears every leave event of HR's contract, the lifecycle of HR, and the boards' events of one's own work", () => {
+  it("hears every leave event of HR's contract, the lifecycle of HR, and the boards' events the console tells a member of", () => {
     expect(Object.keys(plugin.on).sort()).toEqual(
       [
         "console:agent.state_changed",
         "console:decision.addressed",
+        "console:decision.answered",
         "console:decision.raised",
         "console:task.archived",
         "console:task.commented",
@@ -70,7 +71,8 @@ describe("the module", () => {
     const asked = [...parsed.manifest.capabilities, ...parsed.manifest.optionalCapabilities];
     expect(asked.filter((capability) => !design.includes(`\`${capability}\``))).toEqual([]);
     expect(parsed.manifest.board.needs).toBe("none");
-    // Every member chooses what they are told of their own work; the rest is the messenger role's.
+    // Every member chooses what of the console's notifications reaches them in Slack; the rest is
+    // the messenger role's.
     expect(Object.keys(parsed.manifest.roles)).toEqual(["member", "messenger"]);
     expect(parsed.manifest.defaultRole).toBe("member");
   });

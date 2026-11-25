@@ -5,15 +5,15 @@
     "ko": "메신저"
   },
   "description": {
-    "en": "Tells people in Slack of their own work, as each chooses, and what the console's plugins have for them, and brings back what they do there: time off requested in the chat, approvals threaded.",
-    "ko": "콘솔의 플러그인이 사람들에게 전할 것과 각자 고른 자기 일의 소식을 Slack으로 보내고, 거기서 한 일을 콘솔로 가져옵니다. HR은 채팅에서 휴가를 신청하고 취소하며, 결재는 결재자와 함께 스레드로 이어집니다."
+    "en": "Sends on to Slack what the console tells each member of, as each chooses, and what the console's plugins have for people; brings back what they do there: time off asked in chat, approvals threaded.",
+    "ko": "콘솔이 각자에게 알린 것을 고른 대로 Slack으로도 보내고, 콘솔의 플러그인이 사람들에게 전할 것을 알리며, 거기서 한 일을 콘솔로 가져옵니다. HR은 채팅에서 휴가를 신청하고 취소하며, 결재는 결재자와 함께 스레드로 이어집니다."
   },
   "agentNote": {
-    "en": "Connects Slack workspaces, matches people to their accounts and routes plugin events to channels, for whoever keeps the messenger; tells each person of their own work as they choose (notify, notices).",
-    "ko": "Slack 워크스페이스를 연결하고, 사람을 Slack 계정과 맞추고, 플러그인 알림을 채널로 보냅니다(메신저 담당). 각자 고른 대로 자기 일의 소식을 보냅니다(notify, notices)."
+    "en": "For whoever keeps the messenger: Slack workspaces, accounts matched, plugin events routed to channels. For a member: which of what the console tells them reaches Slack too, and when (notify, notices).",
+    "ko": "메신저 담당: Slack 워크스페이스 연결, 계정 맞추기, 플러그인 알림을 채널로 보내기. 구성원: 콘솔이 알려 주는 것 가운데 무엇을 언제 Slack으로도 받을지(notify, notices). 무엇을 알림으로 받을지는 console notify."
   },
   "pluginApi": 1,
-  "console": ">=0.6.0 <0.7.0",
+  "console": ">=0.6.1 <0.7.0",
   "server": "dist/server/index.js",
   "web": "dist/web",
   "skills": "skills",
@@ -26,6 +26,7 @@
     "board:read",
     "events:console",
     "events:plugins",
+    "notifications:read",
     "jobs",
     "endpoints",
     "outbound:slack.com",
@@ -39,8 +40,8 @@
         "ko": "구성원"
       },
       "description": {
-        "en": "Chooses what they are told in Slack of their own work: tasks, decisions, their agent accounts.",
-        "ko": "자기 일(작업, 결정, 내 에이전트 계정) 가운데 무엇을 Slack으로 받을지 정합니다."
+        "en": "Chooses which of what the console tells them reaches them in Slack too, and when.",
+        "ko": "콘솔이 알려 주는 것 가운데 무엇을 언제 Slack으로도 받을지 정합니다."
       }
     },
     "messenger": {
@@ -192,8 +193,8 @@
     {
       "key": "notifications",
       "name": {
-        "en": "My notifications",
-        "ko": "내 알림"
+        "en": "My Slack notifications",
+        "ko": "내 Slack 알림"
       },
       "level": "workspace",
       "roles": ["member"]
@@ -218,7 +219,7 @@
       "wide": true
     }
   ],
-  "dataVersion": 3,
+  "dataVersion": 4,
   "store": {
     "homepage": "https://github.com/skillcdn/console-plugins/tree/main/plugins/messenger#readme",
     "repository": "https://github.com/skillcdn/console-plugins",

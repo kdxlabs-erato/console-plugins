@@ -1,20 +1,21 @@
-// A person's own notifications (ADR-0015): what they are told in Slack of their own work, each kind
-// a chip, at once or in one message a day at a time of the workspace's zone, whether what their
-// own agents did counts, the projects they turned off; where they are told, and what waits for the
-// day's message. Saving runs the command `notify`, as their agent would.
+// A member's own Slack notifications (ADR-0017): which of what the console tells them reaches them
+// in Slack too, each kind a chip and the tasks they turned on themselves beside them, at once or
+// in one message a day at a time of the workspace's zone; where they are told, and what waits for
+// the day's message. What they are told at all is the console's to say, and the page leads to its
+// settings. Saving runs the command `notify`, as their agent would.
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import {
   CADENCES,
   type Cadence,
-  NOTICE_KINDS,
-  type NoticeKind,
+  CONSOLE_NOTIFICATIONS_PATH,
+  NOTICE_CHOICES,
+  type NoticeChoice,
   type NoticesView,
 } from "../../shared/contracts.js";
 import {
   actions,
   button,
   callout,
-  check,
   checks,
   columns,
   errorBlock,
@@ -46,9 +47,9 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
     main.push(callout(w.noAccount.title, w.noAccount.body, "warning"));
   }
 
-  const kinds = checks<NoticeKind>(
-    NOTICE_KINDS.map((kind) => ({ value: kind, label: w.kinds[kind] })),
-    new Set(NOTICE_KINDS.filter((kind) => view.kinds[kind])),
+  const kinds = checks<NoticeChoice>(
+    NOTICE_CHOICES.map((choice) => ({ value: choice, label: w.kinds[choice] })),
+    new Set(NOTICE_CHOICES.filter((choice) => view.kinds[choice])),
     w.what,
   );
   const at = input("time", { value: view.at, maxLength: 5 });
@@ -63,7 +64,6 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
       atField.hidden = chosen !== "daily";
     },
   );
-  const ownAgents = check(w.ownAgents, view.ownAgents);
   const said = statusLine();
   const save = submitButton(w.save);
   // Each choice a row of the console's settings form, its name and hint beside its control, so
@@ -71,21 +71,30 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
   const node = settingsForm(
     settingsRow(w.what, w.whatHint, kinds.node),
     settingsRow(w.when, undefined, cadence.node, atField),
-    settingsRow(w.agents, undefined, ownAgents.node),
     actions(save, said),
   );
   onSubmit(node, async () => {
     const on = kinds.chosen();
     await runCommand(frame, save, said, words, "notify", {
       on,
-      off: NOTICE_KINDS.filter((kind) => !on.includes(kind)),
+      off: NOTICE_CHOICES.filter((choice) => !on.includes(choice)),
       cadence: cadence.value(),
       ...(cadence.value() === "daily" && at.value.length === 5 ? { at: at.value } : {}),
-      "own-agents": ownAgents.checked(),
     });
   });
   main.push(panel(w.choose, node));
 
+  // What one is told at all is the console's own setting, a kind off there sent by nobody: the
+  // way to it stands first beside the choice, since a kind is turned on there before it is here.
+  aside.push(
+    panel(
+      w.console,
+      muted(w.consoleHint),
+      toolbar(
+        button(w.openConsole, () => frame.navigate(CONSOLE_NOTIFICATIONS_PATH), "secondary", true),
+      ),
+    ),
+  );
   // Where the messages go, and what waits for the day's. With no account the warning above says
   // so already, and the pane keeps only how a place is chosen.
   aside.push(
@@ -102,24 +111,6 @@ function build(frame: PluginFrame, words: Words, view: NoticesView): HTMLElement
       ...(view.cadence === "daily" ? [muted(w.waiting(String(view.waiting)))] : []),
     ),
   );
-  if (view.mutedProjects.length > 0) {
-    const rows = view.mutedProjects.map((project) => {
-      const status = statusLine();
-      const back = button(
-        w.unmute,
-        () => {
-          void runCommand(frame, back, status, words, "notify", {
-            unmute: [project.key ?? project.id],
-          });
-        },
-        "ghost",
-        true,
-      );
-      back.disabled = project.key === null;
-      return toolbar(muted(project.name ?? project.key ?? project.id), back, status);
-    });
-    aside.push(panel(w.muted, ...rows));
-  }
   if (view.chosen) {
     const status = statusLine();
     const reset = button(

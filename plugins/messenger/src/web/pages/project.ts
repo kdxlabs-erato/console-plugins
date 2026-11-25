@@ -1,6 +1,6 @@
-// A project's own page of the messenger (ADR-0014, ADR-0015): the Slack workspace the project is
-// told in, which whoever keeps the messenger may change, and whether the reader is told of it.
-// Each press runs a command, `notify` for the reader's own choice, `workspace` for the keeper's.
+// A project's own page of the messenger (ADR-0014): the Slack workspace the project is told in,
+// which whoever keeps the messenger may change with the command `workspace`. What a member is told
+// of the project is the console's to say, and which of it reaches Slack their own page's.
 import type { PluginFrame } from "@skillcdn/console/plugin/web";
 import type { ProjectNoticesView } from "../../shared/contracts.js";
 import {
@@ -40,34 +40,7 @@ function build(frame: PluginFrame, words: Words, view: ProjectNoticesView): HTML
   if (view.workspace.default) {
     whereNode.append(badge(w.byDefault, "neutral"));
   }
-  const mineStatus = statusLine();
-  const mine = button(
-    view.muted ? w.unmute : w.mute,
-    () => {
-      void runCommand(
-        frame,
-        mine,
-        mineStatus,
-        words,
-        "notify",
-        view.muted ? { unmute: [key] } : { mute: [key] },
-      );
-    },
-    view.muted ? "primary" : "secondary",
-    true,
-  );
-  parts.push(
-    panel(
-      w.here,
-      factsPlain([
-        [w.workspace, whereNode],
-        [w.you, badge(view.muted ? w.muted : w.told, view.muted ? "neutral" : "success")],
-      ]),
-      muted(view.muted ? w.mutedHint : w.toldHint),
-      toolbar(mine),
-      mineStatus,
-    ),
-  );
+  parts.push(panel(w.here, factsPlain([[w.workspace, whereNode]]), muted(w.hint)));
   // Whoever keeps the messenger says which workspace the project is told in, where there are several.
   if (view.keeper && view.workspaces.length > 1) {
     const chosen = select(

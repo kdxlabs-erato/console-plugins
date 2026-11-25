@@ -65,7 +65,7 @@ export {
 export { slackOauthEndpoint } from "./oauth.js";
 export { channels, route, routesQuery, unroute } from "./routes.js";
 export { slackEndpoint } from "./slack/interactions.js";
-export { toVersion3, upgrades } from "./upgrades.js";
+export { toVersion3, toVersion4, upgrades } from "./upgrades.js";
 
 export default definePlugin({
   collections,

@@ -1,6 +1,7 @@
 // The shapes the queries answer and the pages read: how the connection stands, the routes, the
 // people and their accounts in Slack, and what was sent. Built into both bundles, so that the
 // server and the pages read one definition.
+import type { NotificationKind } from "@skillcdn/console/api";
 
 /** The languages the plugin speaks: what people read in Slack, the pages, the manifest. */
 export const LANGUAGES = ["en", "ko"] as const;
@@ -260,52 +261,55 @@ export interface ActivityRow {
 }
 
 /**
- * What a person may be told of their own work in a direct message (ADR-0015): a task given to
- * them; a task they own moved; one of theirs changed, its days, title or body; commented; put
- * away; a decision waiting on them; for a manager, their agent accounts stopping, stopped by a
- * usage limit, long unheard or running again.
+ * What a member is told of in a direct message: the console's kinds of notification (ADR-0017),
+ * by the console's own names, since the console decides who is told of what and the messenger
+ * sends that on. A task given to them; one they are at work on ready to begin; one they own
+ * moved; one of theirs changed, commented or put away; a decision waiting for them; one they
+ * raised answered; an agent account that reports to them standing otherwise. Written out here and
+ * held equal to the console's `NOTIFICATION_KINDS` by a test: the module that exports them is
+ * the console's whole API, which a bundle of the plugin's has no use for.
  */
 export const NOTICE_KINDS = [
   "assigned",
+  "ready",
   "moved",
   "changed",
   "commented",
   "archived",
-  "decisions",
-  "agents",
-] as const;
+  "decision",
+  "answered",
+  "agent",
+] as const satisfies readonly NotificationKind[];
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
 
-/** The kinds on for whoever chose nothing yet. */
-export const NOTICE_DEFAULTS: Readonly<Record<NoticeKind, boolean>> = {
-  assigned: true,
-  moved: true,
-  changed: false,
-  commented: true,
-  archived: false,
-  decisions: true,
-  agents: true,
-};
+/**
+ * What a member turns off for Slack beside a kind: the tasks whose notifications they turned on
+ * themselves in the console, which tell them of everything on them whatever their kinds.
+ */
+export const FOLLOWED = "followed";
+
+/** Everything a member chooses of what the console tells them: each kind, and the tasks they turned on. */
+export const NOTICE_CHOICES = [...NOTICE_KINDS, FOLLOWED] as const;
+export type NoticeChoice = (typeof NOTICE_CHOICES)[number];
+
+/** Where a member chooses what they are told at all: the console's own settings, by its path. */
+export const CONSOLE_NOTIFICATIONS_PATH = "/settings/notifications";
 
 /** At once, or in one message a day at a time of the workspace's zone. */
 export const CADENCES = ["now", "daily"] as const;
 export type Cadence = (typeof CADENCES)[number];
 
-/** A person's own choice of what they are told, as the page and their agent read it. */
+/** A member's own choice of what reaches them in Slack, as the page and their agent read it. */
 export interface NoticesView {
-  readonly kinds: Readonly<Record<NoticeKind, boolean>>;
-  /** The projects they are told nothing of, by key and name. */
-  readonly mutedProjects: readonly {
-    readonly id: string;
-    readonly key: string | null;
-    readonly name: string | null;
-  }[];
+  /**
+   * Of what the console tells them, what is sent on to Slack: each kind, and the tasks they
+   * turned on themselves. A kind off in the console tells them nothing, whatever stands here.
+   */
+  readonly kinds: Readonly<Record<NoticeChoice, boolean>>;
   readonly cadence: Cadence;
   /** The time of the day's message, `HH:MM` in the workspace's zone, and the zone. */
   readonly at: string;
   readonly timeZone: string;
-  /** Whether what their own agents did for them is told to them too. */
-  readonly ownAgents: boolean;
   /** Whether they ever chose, or stand on the defaults. */
   readonly chosen: boolean;
   /** The workspaces they have an account in, where they are told. */
@@ -314,7 +318,7 @@ export interface NoticesView {
   readonly waiting: number;
 }
 
-/** How a project stands with Slack, for its page: the workspace it is told in, and the reader's own choice. */
+/** How a project stands with Slack, for its page: the workspace it is told in. */
 export interface ProjectNoticesView {
   readonly project: { readonly id: string; readonly key: string; readonly name: string } | null;
   readonly workspace: {
@@ -323,7 +327,6 @@ export interface ProjectNoticesView {
     readonly default: boolean;
   } | null;
   readonly workspaces: readonly { readonly teamId: string; readonly teamName: string | null }[];
-  readonly muted: boolean;
   /** Whether the reader may say which workspace the project is told in: the messenger role. */
   readonly keeper: boolean;
 }
